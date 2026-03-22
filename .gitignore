@@ -1,0 +1,28 @@
+# Environment and secrets
+.env
+*.env.local
+
+# Node
+node_modules/
+package-lock.json
+
+# Runtime state
+state/
+queue/
+_active/
+_archived/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Planning (not shipped)
+.planning/

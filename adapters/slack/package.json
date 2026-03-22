@@ -1,0 +1,10 @@
+{
+  "name": "claude-bot-slack-adapter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@slack/socket-mode": "^2.0.0",
+    "@slack/web-api": "^7.0.0"
+  }
+}

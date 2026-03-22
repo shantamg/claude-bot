@@ -1,0 +1,35 @@
+{
+  "description": "Maps bot:* GitHub labels to workspace paths. When a label is applied to an issue, the workspace-dispatcher routes it to the corresponding workspace.",
+  "labels": {
+    "bot:bug-fix": {
+      "workspace": "bug-fix/",
+      "entry_stage": "01-select",
+      "trigger": "cron"
+    },
+    "bot:health-check": {
+      "workspace": "health-check/",
+      "entry_stage": "audit",
+      "trigger": "cron"
+    },
+    "bot:pr-review": {
+      "workspace": "pr-review/",
+      "entry_stage": "review",
+      "trigger": "label"
+    },
+    "bot:docs-audit": {
+      "workspace": "docs-audit/",
+      "entry_stage": "incremental",
+      "trigger": "cron"
+    },
+    "bot:security-audit": {
+      "workspace": "security-audit/",
+      "entry_stage": "scan",
+      "trigger": "cron"
+    },
+    "bot:daily-digest": {
+      "workspace": "daily-digest/",
+      "entry_stage": "compile",
+      "trigger": "cron"
+    }
+  }
+}

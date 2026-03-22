@@ -1,0 +1,250 @@
+# ╔═══════════════════════════════════════════════════════════════════════════════╗
+# ║  bot.yaml — claude-bot project configuration                               ║
+# ╠═══════════════════════════════════════════════════════════════════════════════╣
+# ║                                                                             ║
+# ║  Copy this file into your project at:  <your-repo>/bot/bot.yaml            ║
+# ║                                                                             ║
+# ║  This is the single source of truth for your bot's behavior. The framework  ║
+# ║  reads it at deploy time (to generate crontab, deploy scripts) and at       ║
+# ║  runtime (to check thresholds, resolve workspaces, etc.).                   ║
+# ║                                                                             ║
+# ║  Config resolution order:                                                   ║
+# ║    1. Values in this file                                                   ║
+# ║    2. Environment variables (e.g. RESOURCE_MEMORY_THRESHOLD)                ║
+# ║    3. Framework defaults (hardcoded fallbacks)                              ║
+# ║                                                                             ║
+# ║  Secrets (tokens, channel IDs) go in /opt/claude-bot/.env on the instance  ║
+# ║  — never in this file.                                                      ║
+# ║                                                                             ║
+# ╚═══════════════════════════════════════════════════════════════════════════════╝
+
+
+# ─── Project Identity ─────────────────────────────────────────────────────────
+# The instance name is used for AWS resource tags, SSH host alias, file paths,
+# lock prefixes, and log identification. Must be alphanumeric + hyphens only.
+
+name: my-bot
+
+
+# ─── Project Settings ─────────────────────────────────────────────────────────
+
+project:
+  repo: myorg/myrepo                       # GitHub repo (owner/name)
+  checkout: ~/projects/myrepo              # Path to the repo checkout on the instance
+  # path: ""                               # Subdirectory within the repo (for monorepos)
+                                           # Example: "apps/backend" if bot.yaml lives at
+                                           # apps/backend/bot/bot.yaml
+  bot_username: MyBot                      # GitHub bot username — used to filter out the
+                                           # bot's own comments from notification processing
+  default_branch: main                     # Branch to sync from (default: main)
+
+
+# ─── AWS Infrastructure ──────────────────────────────────────────────────────
+# These settings are used by infra/provision.sh to create the EC2 instance.
+# After initial provisioning, changes here require redeployment.
+
+aws:
+  profile: default                         # AWS CLI profile name (from ~/.aws/credentials)
+  region: us-west-2                        # EC2 region
+  instance_type: t3.medium                 # Instance type — t3.medium (2 vCPU, 4GB) is a
+                                           # good starting point for most projects
+  # ami: ami-0e5e1413a3bf2d262             # Ubuntu 24.04 amd64 AMI — auto-detected per
+                                           # region if omitted, which is the recommended
+                                           # default. Only set this if you need a specific AMI.
+  disk_gb: 30                              # EBS volume size in GB
+  # key_name: ""                           # SSH key pair name (default: <name>)
+  # security_group: ""                     # Security group name (default: <name>-sg)
+
+
+# ─── Resource Thresholds ─────────────────────────────────────────────────────
+# The resource gate (check-resources.sh) evaluates these thresholds before
+# allowing a new agent to start. If any threshold is exceeded, the request
+# goes into the priority queue and is retried when resources free up.
+
+resources:
+  memory_threshold: 85                     # Queue requests when memory usage > X%
+  load_threshold: 3.0                      # Queue requests when 1-min load average > X
+                                           # Rule of thumb: 1.5x your vCPU count
+                                           # (t3.medium = 2 vCPU, so 3.0 is a good default)
+  disk_threshold: 90                       # Queue requests when disk usage > X%
+  disk_warn_threshold: 80                  # Post a Slack warning when disk usage > X%
+  max_concurrent: 5                        # Maximum concurrent Claude agents
+  reserved_interactive: 2                  # Slots reserved for human-triggered work
+                                           # (Slack messages, GitHub mentions). Scheduled
+                                           # jobs can only use (max_concurrent - reserved)
+                                           # slots, ensuring humans are never blocked.
+
+
+# ─── Stale Process Cleanup ───────────────────────────────────────────────────
+# The 3-tier cleanup system (clear-stale-locks.sh) handles agents that hang
+# or run too long. It runs on a cron interval (see infrastructure section).
+#
+# Tier 1: Idle detection — no heartbeat activity for idle_threshold_min
+# Tier 2: AI triage — Claude evaluates if the process is making progress
+# Tier 3: Hard cap — unconditional kill after hard_cap_min
+
+process_cleanup:
+  idle_threshold_min: 5                    # No heartbeat activity for this long = idle
+  triage_min_age: 10                       # Minimum process age (min) before AI triage
+  hard_cap_min: 45                         # Hard kill after this many minutes, regardless
+  agent_archive_ttl_min: 60                # Keep archived agent dirs for debugging
+
+
+# ─── Slack Integration ───────────────────────────────────────────────────────
+# Requires SLACK_APP_TOKEN and SLACK_BOT_TOKEN in .env on the instance.
+# Channel routing is configured in bot/channel-config.json (not here).
+
+slack:
+  enabled: true
+  socket_mode: true                        # Enable Socket Mode for real-time message handling.
+                                           # When true, the socket listener (socket-listener.mjs)
+                                           # stays connected to Slack via WebSocket and processes
+                                           # messages as they arrive.
+  ops_channel_env: BOT_OPS_CHANNEL_ID      # Name of the env var (in .env) that holds the
+                                           # Slack channel ID for ops alerts. The framework
+                                           # posts errors, health warnings, and status updates
+                                           # to this channel.
+
+
+# ─── GitHub Integration ─────────────────────────────────────────────────────
+# Monitors GitHub notifications for @mentions, review requests, and comments.
+# Requires gh CLI to be authenticated on the instance (gh auth login) or
+# GH_TOKEN in .env.
+
+github:
+  enabled: true
+  notifications: true                      # Poll GitHub notifications API for participating
+                                           # threads (mentions, review requests, replies)
+  notification_interval: "* * * * *"       # Cron schedule for check-github.sh
+                                           # Default: every minute
+  labels:
+    in_progress: "bot:in-progress"         # Applied when an agent picks up an issue
+    failed: "bot:failed"                   # Applied when an agent fails on an issue
+
+
+# ─── Scheduled Tasks ────────────────────────────────────────────────────────
+# Each entry corresponds to a workspace. At the scheduled time, the framework
+# runs:  workspace-dispatcher.sh --scheduled <workspace-name> <prompt>
+#
+# The workspace is resolved via the cascade:
+#   1. <your-project>/bot/workspaces/<name>/   (project-specific, highest priority)
+#   2. claude-bot/base-workspaces/<name>/      (framework default, fallback)
+#
+# The framework ships base workspaces for: health-check, bug-fix, pr-review,
+# docs-audit, security-audit, and daily-digest. You can override any of them
+# by creating a workspace with the same name in your project's bot/workspaces/.
+
+schedules:
+
+  # ── Recommended defaults (using base workspaces) ──
+
+  health-check:
+    enabled: true
+    cron: "0 */6 * * *"                   # Every 6 hours
+    prompt: "Run scheduled health check"
+
+  bug-fix:
+    enabled: true
+    cron: "0 * * * *"                      # Every hour
+    prompt: "Fix untouched bug issues"
+    precheck: true                         # Run bug-fix-precheck.sh first to see if there
+                                           # are any issues to work on. Skips the run (and
+                                           # saves Claude credits) if the precheck fails.
+
+  # docs-audit:
+  #   enabled: true
+  #   cron: "0 10 * * *"                   # Daily at 10am UTC
+  #   prompt: "Run incremental docs audit"
+
+  # daily-digest:
+  #   enabled: true
+  #   cron: "30 10 * * *"                  # Daily at 10:30am UTC
+  #   prompt: "Compile daily digest"
+
+  # security-audit:
+  #   enabled: true
+  #   cron: "0 11 * * 1"                   # Weekly Monday at 11am UTC
+  #   prompt: "Run weekly security audit"
+
+  # pr-reviewer:
+  #   enabled: false
+  #   cron: "*/5 * * * *"                  # Every 5 minutes
+  #   prompt: "Scan and review open bot PRs"
+
+  # ── Custom schedules ──
+  # Add any workspace name here. The workspace must exist in either your
+  # project's bot/workspaces/ or the framework's base-workspaces/.
+  #
+  # my-custom-task:
+  #   enabled: true
+  #   cron: "0 9 * * 1-5"                 # Weekdays at 9am UTC
+  #   prompt: "Do the custom thing"
+  #   precheck: true                       # Optional: run <workspace>-precheck.sh first
+
+
+# ─── Infrastructure Cron (always-on) ─────────────────────────────────────────
+# Core framework cron jobs that keep the bot running. You generally do not
+# need to change these — the defaults work well for most setups. These are
+# separate from scheduled tasks above; they handle system-level operations.
+
+infrastructure:
+  git_pull_interval: "* * * * *"           # Sync framework + project repos from git
+  socket_watchdog_interval: "*/5 * * * *"  # Check that Socket Mode listener is alive
+  stale_lock_interval: "*/5 * * * *"       # Run stale process cleanup
+  queue_drain_interval: "* * * * *"        # Drain the request queue
+  health_check_time: "0 6 * * *"           # Daily system health check (UTC)
+  label_dispatcher_interval: "* * * * *"   # Label-driven workspace dispatch
+
+
+# ─── Claude Code Settings ───────────────────────────────────────────────────
+# Controls how Claude Code sessions are configured when the bot spawns agents.
+
+claude:
+  # Permissions granted to bot-spawned Claude sessions. These use the
+  # --dangerously-skip-permissions flag, so the bot runs without interactive
+  # approval prompts. The list below is the recommended default — it gives
+  # the agent full access to standard tools.
+  permissions:
+    allow:
+      - "Bash(*)"
+      - "Read(*)"
+      - "Write(*)"
+      - "Edit(*)"
+      - "Glob(*)"
+      - "Grep(*)"
+      - "Agent(*)"
+      - "WebFetch(*)"
+      - "WebSearch(*)"
+
+  # Additional MCP servers to make available to bot sessions.
+  # Format follows Claude Code's MCP server configuration.
+  # mcp_servers:
+  #   my-server:
+  #     command: "node"
+  #     args: ["/path/to/server.js"]
+
+  # Extra content to append to ~/.claude/CLAUDE.md on the instance.
+  # Use this for project-wide instructions that should apply to every
+  # agent session, regardless of workspace.
+  # claude_md: |
+  #   ## Project Conventions
+  #   - Always run tests before committing
+  #   - Use conventional commit messages
+  #   - Never modify files in the vendor/ directory
+
+
+# ─── Notifications ───────────────────────────────────────────────────────────
+# Where the framework sends operational alerts (errors, health warnings,
+# agent failures). Currently supports Slack only.
+
+notifications:
+  slack:
+    enabled: true                          # Post alerts and errors to the ops channel
+                                           # defined by slack.ops_channel_env above
+  # Future adapters:
+  # discord:
+  #   enabled: false
+  #   webhook_url_env: DISCORD_WEBHOOK_URL
+  # email:
+  #   enabled: false
+  #   to: "ops@example.com"

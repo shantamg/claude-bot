@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "channel-config.json — Slack channel routing for claude-bot.",
+    "",
+    "Copy this file to your project at: <your-repo>/bot/channel-config.json",
+    "On the instance, it lives at: /opt/claude-bot/channel-config.json",
+    "",
+    "The socket listener reads this file at startup to determine which Slack",
+    "channels to monitor and how to route messages to workspaces.",
+    "",
+    "Changes require a restart of the socket listener (the watchdog will",
+    "restart it automatically within 5 minutes, or kill the process manually)."
+  ],
+
+  "channels": [
+    {
+      "env_var": "ADMIN_SLACK_DM",
+      "name": "DM (Admin)",
+      "workspace": "slack-triage",
+      "context_count": 10
+    },
+    {
+      "env_var": "TEAM_CHANNEL_ID",
+      "name": "#team",
+      "workspace": "slack-triage",
+      "context_count": 10
+    }
+  ]
+}
