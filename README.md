@@ -17,7 +17,7 @@ A reusable framework for running autonomous Claude Code agents on EC2 instances.
 ## Quick Start
 
 ```bash
-git clone https://github.com/yourorg/claude-bot.git
+git clone https://github.com/shantamg/claude-bot.git
 cd claude-bot
 claude
 # Then say: "Set this up for my project <owner/repo>"

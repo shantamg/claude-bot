@@ -23,7 +23,7 @@ You also need:
 ## Step 1: Clone the Framework
 
 ```bash
-git clone https://github.com/yourorg/claude-bot.git
+git clone https://github.com/shantamg/claude-bot.git
 cd claude-bot
 ```
 
@@ -163,7 +163,7 @@ SSH into the instance and clone both repos:
 ssh my-bot
 
 # Clone the framework
-git clone https://github.com/yourorg/claude-bot.git ~/claude-bot
+git clone https://github.com/shantamg/claude-bot.git ~/claude-bot
 
 # Clone your project
 git clone https://github.com/myorg/myrepo.git ~/projects/myrepo
