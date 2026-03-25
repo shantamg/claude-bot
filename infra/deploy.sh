@@ -31,6 +31,14 @@ echo "Syncing core scripts..."
 scp -q "$REPO_ROOT"/core/*.sh "$HOST:$BOT_HOME/scripts/"
 ssh "$HOST" "chmod +x $BOT_HOME/scripts/*.sh"
 
+# Sync lib/ subdirectory (modular components sourced by run-claude.sh)
+if [ -d "$REPO_ROOT/core/lib" ]; then
+  echo "Syncing lib/ modules..."
+  ssh "$HOST" "mkdir -p $BOT_HOME/scripts/lib"
+  scp -q "$REPO_ROOT"/core/lib/*.sh "$HOST:$BOT_HOME/scripts/lib/"
+  ssh "$HOST" "chmod +x $BOT_HOME/scripts/lib/*.sh"
+fi
+
 # ── Sync adapters ────────────────────────────────────────────────────────────
 echo "Syncing Slack adapter..."
 ssh "$HOST" "mkdir -p $BOT_HOME/adapters/slack"
@@ -41,6 +49,22 @@ echo "Syncing GitHub adapter..."
 ssh "$HOST" "mkdir -p $BOT_HOME/adapters/github"
 scp -q "$REPO_ROOT"/adapters/github/* "$HOST:$BOT_HOME/adapters/github/"
 ssh "$HOST" "chmod +x $BOT_HOME/adapters/github/*.sh 2>/dev/null || true"
+
+# ── Create symlinks ───────────────────────────────────────────────────────────
+echo "Creating symlinks..."
+
+# bot.yaml — resolve project checkout path from the yaml
+PROJECT_CHECKOUT=$(yq -r '.project.checkout // ""' "$BOT_YAML")
+if [ -n "$PROJECT_CHECKOUT" ]; then
+  # Expand ~ to the remote user's home directory
+  ssh "$HOST" "ln -sfn ${PROJECT_CHECKOUT}/bot/bot.yaml $BOT_HOME/bot.yaml"
+  ssh "$HOST" "ln -sfn ${PROJECT_CHECKOUT}/bot/workspaces $BOT_HOME/workspaces 2>/dev/null || true"
+  ssh "$HOST" "ln -sfn ${PROJECT_CHECKOUT}/bot/channel-config.json $BOT_HOME/channel-config.json 2>/dev/null || true"
+  ssh "$HOST" "ln -sfn ${PROJECT_CHECKOUT}/bot/label-registry.json $BOT_HOME/label-registry.json 2>/dev/null || true"
+fi
+
+# base-workspaces — link to the framework's base workspaces on the instance
+ssh "$HOST" "ln -sfn ~/claude-bot/base-workspaces $BOT_HOME/base-workspaces"
 
 # ── Generate and install crontab ─────────────────────────────────────────────
 echo "Generating crontab from bot.yaml..."
