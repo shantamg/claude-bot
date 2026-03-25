@@ -12,7 +12,7 @@ A reusable framework for running autonomous Claude Code agents on EC2 instances.
 - **Resource gating**: Memory/CPU/disk checks with automatic queuing when the instance is busy
 - **Scheduled jobs**: Cron-driven workspaces for health checks, bug fixes, docs audits, and more
 - **Inter-agent coordination**: Multiple concurrent agents with messaging, deduplication, and stale process cleanup
-- **Base workspaces included**: health-check, bug-fix, pr-review, docs-audit, security-audit, daily-digest, stale-sweeper
+- **Base workspaces included**: health-check, bug-fix, pr-review, docs-audit, security-audit, daily-digest, stale-sweeper, expert-review
 
 ## Quick Start
 
@@ -27,6 +27,21 @@ Claude Code reads the framework's `CLAUDE.md` and walks you through interactive 
 
 For manual setup, see [docs/SETUP.md](docs/SETUP.md).
 
+## What Goes Where
+
+The framework lives in its own repo. Your project gets a small `bot/` directory:
+
+```
+your-project/
+└── bot/
+    ├── bot.yaml                 # Project config (copy from bot.yaml.example)
+    ├── label-registry.json      # GitHub label → workspace routing
+    ├── channel-config.json      # Slack channel routing (optional)
+    └── workspaces/              # Project-specific workspace overrides (can start empty)
+```
+
+The framework's base workspaces are used automatically. You only need to add project-specific overrides when the defaults don't fit.
+
 ## Repository Structure
 
 ```
@@ -38,7 +53,14 @@ claude-bot/
 │
 ├── core/                        # Core scripts (project-agnostic)
 │   ├── config.sh                # Config loader (reads bot.yaml, exports env vars)
-│   ├── run-claude.sh            # Agent executor (locking, resource gate, worktrees)
+│   ├── run-claude.sh            # Agent executor (orchestrator, sources lib/)
+│   ├── lib/                     # Modular components sourced by run-claude.sh
+│   │   ├── parse-args.sh        # Argument parsing (--workspace, --session, etc.)
+│   │   ├── rate-limit.sh        # Rate limit gate + stream-json event detection
+│   │   ├── invoke-claude.sh     # Claude invocation with session + raw stream capture
+│   │   ├── setup-agent.sh       # Agent directory creation + meta.json
+│   │   ├── setup-worktree.sh    # Git worktree creation + workspace resolution
+│   │   └── cleanup-agent.sh     # EXIT trap cleanup
 │   ├── workspace-dispatcher.sh  # Label-driven + scheduled dispatch
 │   ├── check-resources.sh       # Memory/CPU/disk threshold checks
 │   ├── process-queue.sh         # Priority queue drain
@@ -65,13 +87,14 @@ claude-bot/
 │   └── logrotate.conf           # Log rotation template
 │
 ├── base-workspaces/             # Generic workspaces shipped with the framework
-│   ├── health-check/
-│   ├── bug-fix/
-│   ├── pr-review/
-│   ├── docs-audit/
-│   ├── security-audit/
-│   ├── daily-digest/
-│   └── stale-sweeper/
+│   ├── health-check/            # Production health audits
+│   ├── bug-fix/                 # Auto-fix GitHub bug issues (3-stage pipeline)
+│   ├── pr-review/               # Structured code reviews
+│   ├── docs-audit/              # Documentation drift detection
+│   ├── security-audit/          # Security vulnerability scanning
+│   ├── daily-digest/            # Activity summaries
+│   ├── stale-sweeper/           # Stale issue/PR cleanup
+│   └── expert-review/           # Multi-expert analysis with extensible expert pool
 │
 └── docs/
     ├── SETUP.md                 # Step-by-step manual setup guide
@@ -79,15 +102,6 @@ claude-bot/
     ├── WORKSPACES.md            # Workspace creation and customization
     └── CONFIG.md                # bot.yaml and config file reference
 ```
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [docs/SETUP.md](docs/SETUP.md) | Step-by-step setup guide for manual installation |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture, data flows, security model |
-| [docs/WORKSPACES.md](docs/WORKSPACES.md) | How to create, extend, and customize workspaces |
-| [docs/CONFIG.md](docs/CONFIG.md) | Complete bot.yaml and config file reference |
 
 ## How It Works
 
@@ -97,6 +111,32 @@ claude-bot/
 4. **The dispatcher** routes incoming work to the right workspace
 5. **`run-claude.sh`** spawns Claude Code agents with resource gating, locking, and worktree isolation
 6. **`git-pull.sh`** auto-syncs from git every minute -- push changes to main and they're live
+
+## Base Workspaces
+
+These ship with the framework and work for any project out of the box:
+
+| Workspace | What it does | Trigger |
+|-----------|-------------|---------|
+| **health-check** | Audits production health (logs, errors, services) | Scheduled (every 6h) |
+| **bug-fix** | Finds untouched bug issues, investigates, writes fix PRs | Scheduled (hourly) + label |
+| **pr-review** | Structured code reviews on pull requests | GitHub `review_requested` |
+| **docs-audit** | Detects documentation drift against codebase | Scheduled (daily) |
+| **security-audit** | Scans for vulnerabilities, secrets, OWASP issues | Scheduled (weekly) |
+| **daily-digest** | Summarizes overnight activity to Slack | Scheduled (daily) |
+| **stale-sweeper** | Finds stale issues/PRs, nudges owners | Scheduled (weekdays) |
+| **expert-review** | Multi-expert analysis with devil's advocate pushback | Label (`bot:expert-review`) |
+
+Override any workspace by creating one with the same name in `bot/workspaces/` in your project. See [docs/WORKSPACES.md](docs/WORKSPACES.md).
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/SETUP.md](docs/SETUP.md) | Step-by-step setup guide for manual installation |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture, data flows, security model |
+| [docs/WORKSPACES.md](docs/WORKSPACES.md) | How to create, extend, and customize workspaces |
+| [docs/CONFIG.md](docs/CONFIG.md) | Complete bot.yaml and config file reference |
 
 ## License
 
