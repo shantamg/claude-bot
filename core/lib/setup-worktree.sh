@@ -16,11 +16,29 @@ fi
 
 WORKTREE_BRANCH=""
 if [ "$SKIP_WORKTREE" -ne 1 ] && [ "$CURRENT_BRANCH" = "$DEFAULT_BRANCH" ]; then
-  WORKTREE_BRANCH="feat/${COMMAND_SLUG}-$(date +%Y%m%d-%H%M%S)"
+  # Include ISSUE_NUMBER in branch name to avoid collisions when multiple agents
+  # for the same workspace start within the same second (e.g., milestone dispatching
+  # 8 issues to general-pr simultaneously).
+  WORKTREE_BRANCH="feat/${COMMAND_SLUG}-${ISSUE_NUMBER:-$$}-$(date +%Y%m%d-%H%M%S)"
   WORKTREE_DIR="/tmp/${BOT_NAME}-worktree-${COMMAND_SLUG}-$$"
   echo "[$(date)] On $DEFAULT_BRANCH — creating worktree at $WORKTREE_DIR on branch $WORKTREE_BRANCH" >> "$LOGFILE"
   cd "$PROJECT_CHECKOUT"
-  git worktree add "$WORKTREE_DIR" -b "$WORKTREE_BRANCH" 2>> "$LOGFILE"
+  # Retry with jitter — concurrent git operations can fail due to git's internal
+  # lock (.git/HEAD.lock, refs lock). When the dispatcher launches multiple agents
+  # in rapid succession, they all compete for the same lock.
+  WORKTREE_RETRIES=0
+  WORKTREE_MAX_RETRIES=5
+  while ! git worktree add "$WORKTREE_DIR" -b "$WORKTREE_BRANCH" 2>> "$LOGFILE"; do
+    WORKTREE_RETRIES=$((WORKTREE_RETRIES + 1))
+    if [ "$WORKTREE_RETRIES" -ge "$WORKTREE_MAX_RETRIES" ]; then
+      echo "[$(date)] ERROR: git worktree add failed after $WORKTREE_MAX_RETRIES retries" >> "$LOGFILE"
+      exit 1
+    fi
+    # Random delay 0.5-2.5s to spread out concurrent attempts
+    JITTER=$(awk "BEGIN {srand($$+$WORKTREE_RETRIES); printf \"%.1f\", 0.5 + rand() * 2}")
+    echo "[$(date)] git worktree add failed (attempt $WORKTREE_RETRIES/$WORKTREE_MAX_RETRIES), retrying in ${JITTER}s" >> "$LOGFILE"
+    sleep "$JITTER"
+  done
   # Navigate into the project path within the worktree
   if [ -n "$PROJECT_PATH" ]; then
     cd "$WORKTREE_DIR/$PROJECT_PATH"
