@@ -122,9 +122,16 @@ export CLAUDE_BOT_PID=$$
 export LOVELY_BOT="$CLAUDE_BOT"
 export LOVELY_BOT_PID="$CLAUDE_BOT_PID"
 
-# Touch initial heartbeat so activity tracking starts immediately
+# Touch initial heartbeat so activity tracking starts immediately.
+# Also start a background updater that touches the heartbeat every 30 seconds
+# while this process is alive. Without this, the heartbeat is only set at startup,
+# and clear-stale-locks.sh thinks the agent is idle during long thinking phases
+# (no tool calls = no log output = process looks stuck and gets killed).
 mkdir -p "$HEARTBEAT_DIR" 2>/dev/null || true
-touch "$HEARTBEAT_DIR/heartbeat-$$.txt" 2>/dev/null || true
+HEARTBEAT_FILE="$HEARTBEAT_DIR/heartbeat-$$.txt"
+touch "$HEARTBEAT_FILE" 2>/dev/null || true
+( while kill -0 $$ 2>/dev/null; do touch "$HEARTBEAT_FILE" 2>/dev/null; sleep 30; done ) &
+HEARTBEAT_UPDATER_PID=$!
 
 # ── Create agent directory and setup worktree ────────────────────────────────
 source "$LIB_DIR/setup-agent.sh"

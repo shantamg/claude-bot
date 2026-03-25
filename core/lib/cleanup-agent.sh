@@ -7,6 +7,8 @@
 cleanup() {
   rm -f "$LOCKFILE"
   rm -f "$HEARTBEAT_DIR/heartbeat-$$.txt" 2>/dev/null || true
+  # Stop the background heartbeat updater
+  kill "$HEARTBEAT_UPDATER_PID" 2>/dev/null || true
 
   if [ -d "$AGENT_HOME" ]; then
     # Log unread messages so they are not silently lost

@@ -125,7 +125,10 @@ for LOCK in ${LOCK_PREFIX}-*.lock; do
       echo "[$(date)] Extended $SLUG (PID $PID) — triage says: $REASON" >> "$LOGFILE"
       ;;
     alert)
-      # Unclear — alert human, don't kill yet
+      # Unclear — alert human, don't kill yet.
+      # Touch heartbeat to prevent re-triage on the next cycle — without this,
+      # the same process gets triaged every 5 minutes and posts duplicate alerts.
+      touch "$HEARTBEAT_FILE" 2>/dev/null || true
       curl -s -X POST https://slack.com/api/chat.postMessage \
         -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
         -H "Content-Type: application/json" \
