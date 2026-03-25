@@ -21,7 +21,7 @@
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/config.sh"
 
-REGISTRY_FILE="${PROJECT_DIR}/bot/label-registry.json"
+REGISTRY_FILE="${PROJECT_CHECKOUT}/bot/label-registry.json"
 LOGFILE="$BOT_LOG_DIR/workspace-dispatcher.log"
 
 # Ensure directories exist

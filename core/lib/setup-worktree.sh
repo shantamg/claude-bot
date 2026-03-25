@@ -35,10 +35,10 @@ if [ -n "$WORKSPACE_NAME" ]; then
   # Use cascade resolution: project workspaces first, then base-workspaces
   RESOLVED_WS=$(resolve_workspace "$WORKSPACE_NAME" 2>/dev/null || echo "")
 
-  # If in a worktree, check workspace relative to the worktree project dir too
+  # If in a worktree, check workspace relative to the worktree root (bot/ lives
+  # at the repo root, not inside the monorepo subpath)
   if [ -z "$RESOLVED_WS" ] && [ -n "$WORKTREE_DIR" ]; then
-    WORKTREE_PROJECT_DIR="$WORKTREE_DIR${PROJECT_PATH:+/$PROJECT_PATH}"
-    WORKTREE_WS_DIR="$WORKTREE_PROJECT_DIR/bot/workspaces/$WORKSPACE_NAME"
+    WORKTREE_WS_DIR="$WORKTREE_DIR/bot/workspaces/$WORKSPACE_NAME"
     if [ -d "$WORKTREE_WS_DIR" ]; then
       RESOLVED_WS="$WORKTREE_WS_DIR"
     fi

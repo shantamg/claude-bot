@@ -70,9 +70,10 @@ else
 fi
 
 # ── Workspace paths ─────────────────────────────────────────────────────────────
-# Active agents directory lives inside the project's bot directory
-if [ -n "$PROJECT_DIR" ]; then
-  WORKSPACES_DIR="$PROJECT_DIR/bot/workspaces"
+# bot/ config lives at the repo root (PROJECT_CHECKOUT), not inside the monorepo
+# subpath (PROJECT_DIR). This matters for monorepos where path: is set.
+if [ -n "$PROJECT_CHECKOUT" ]; then
+  WORKSPACES_DIR="$PROJECT_CHECKOUT/bot/workspaces"
 else
   WORKSPACES_DIR=""
 fi
