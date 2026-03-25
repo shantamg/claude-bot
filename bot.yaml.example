@@ -171,6 +171,11 @@ schedules:
   #   cron: "*/5 * * * *"                  # Every 5 minutes
   #   prompt: "Scan and review open bot PRs"
 
+  # expert-review:
+  #   enabled: false
+  #   cron: "*/5 * * * *"                  # Every 5 minutes (multi-pass, keep_label)
+  #   prompt: "Continue expert review cycle"
+
   # ── Custom schedules ──
   # Add any workspace name here. The workspace must exist in either your
   # project's bot/workspaces/ or the framework's base-workspaces/.

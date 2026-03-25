@@ -30,6 +30,12 @@
       "workspace": "daily-digest/",
       "entry_stage": "compile",
       "trigger": "cron"
+    },
+    "bot:expert-review": {
+      "workspace": "expert-review/",
+      "entry_stage": "01-initialize",
+      "trigger": "label",
+      "keep_label": true
     }
   }
 }

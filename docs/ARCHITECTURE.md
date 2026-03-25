@@ -16,7 +16,14 @@ claude-bot is a framework for running autonomous Claude Code agents on EC2 insta
 claude-bot/
 ├── core/                        # Core scripts (project-agnostic)
 │   ├── config.sh                # Config loader (reads bot.yaml, exports env vars)
-│   ├── run-claude.sh            # Agent executor (locking, resource gate, worktrees)
+│   ├── run-claude.sh            # Agent executor (orchestrator, sources lib/)
+│   ├── lib/                     # Modular components sourced by run-claude.sh
+│   │   ├── parse-args.sh        # Argument parsing (--workspace, --session, etc.)
+│   │   ├── rate-limit.sh        # Rate limit gate + stream-json event detection
+│   │   ├── invoke-claude.sh     # Claude invocation with session + raw stream capture
+│   │   ├── setup-agent.sh       # Agent directory creation + meta.json
+│   │   ├── setup-worktree.sh    # Git worktree creation + workspace resolution
+│   │   └── cleanup-agent.sh     # EXIT trap cleanup
 │   ├── workspace-dispatcher.sh  # Label-driven + scheduled workspace dispatch
 │   ├── check-resources.sh       # Memory/CPU/disk threshold checks
 │   ├── process-queue.sh         # Priority queue drain
@@ -49,7 +56,8 @@ claude-bot/
 │   ├── docs-audit/
 │   ├── security-audit/
 │   ├── daily-digest/
-│   └── stale-sweeper/
+│   ├── stale-sweeper/
+│   └── expert-review/           # Multi-expert analysis (extensible expert pool)
 │
 ├── bot.yaml.example             # Annotated config template
 ├── channel-config.json.example  # Slack routing template
@@ -249,11 +257,12 @@ Every core script starts by sourcing `config.sh`, which reads `bot.yaml` via `yq
 
 Each running agent gets a directory at `_active/agent-<PID>/` containing:
 
-- `meta.json` -- PID, workspace, channel, timestamps
+- `meta.json` -- PID, workspace, channel, issueNumber, timestamps, session info
 - `route.json` -- Current workspace and stage (auto-detected by PostToolUse hook)
 - `inbox/unread/` -- Messages from other agents (pending injection)
 - `inbox/read/` -- Processed messages
-- `stream.log` -- Real-time output
+- `stream.log` -- Real-time output (text extracted from stream-json)
+- `raw-stream.jsonl` -- Raw stream-json output (used for rate limit event detection)
 
 This enables duplicate prevention (agents see what others are working on), inter-agent messaging, route tracking, and live output streaming. Completed agents are moved to `_archived/` and cleaned up by TTL.
 

@@ -49,6 +49,7 @@ The framework ships these generic workspaces that work for any project:
 | daily-digest | `compile` | Daily | Scheduled |
 | security-audit | `scan` | Weekly | Scheduled |
 | stale-sweeper | `identify` | Weekdays | Scheduled |
+| expert-review | `01-initialize`, `02-review-cycle`, `03-synthesize`, `04-complete` | On demand (multi-pass) | Label (`bot:expert-review`) |
 
 ### health-check
 
@@ -86,6 +87,19 @@ Summarizes overnight activity (commits, PRs, Slack messages, issues) and posts a
 ### stale-sweeper
 
 Identifies stale issues, PRs, and branches. Nudges owners or cleans up as appropriate.
+
+### expert-review
+
+Multi-expert issue analysis with devil's advocate pushback. Apply `bot:expert-review` to any GitHub issue and the bot will:
+
+1. **Initialize** — Select 4 expert personas from a configurable pool and post a roster comment
+2. **Review cycle** (looping) — For each expert: write a substantive review, receive devil's advocate pushback, then respond. One action per invocation (multi-pass via `keep_label`).
+3. **Synthesize** — Combine all perspectives into convergence/divergence analysis with ranked recommendations
+4. **Complete** — Swap labels and close out
+
+This is a multi-pass workspace: the trigger label stays on the issue, and the bot re-enters every tick to perform the next action. State is tracked via HTML meta tags in issue comments.
+
+**Expert pool**: Ships with 15 generic experts (psychologist, UX designer, security engineer, systems architect, etc.). Projects can override the workspace to add domain-specific experts — see `base-workspaces/expert-review/stages/01-initialize/CONTEXT.md` for the full pool and extension instructions.
 
 ## Workspace Cascade (Inheritance)
 

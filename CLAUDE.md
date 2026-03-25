@@ -37,6 +37,7 @@ Ask the user these questions. Use sensible defaults where noted.
   - `docs-audit` — daily documentation drift detection
   - `daily-digest` — morning summary of overnight activity
   - `security-audit` — weekly security scan
+  - `expert-review` — multi-expert analysis with devil's advocate pushback (label-triggered, multi-pass)
 - Any custom schedules or workspaces to create now? (can always add later)
 
 ### Phase 2: Generate Config
@@ -307,7 +308,14 @@ claude-bot/                              # THE FRAMEWORK (shared across all proj
 ├── bot.yaml.example                     # Annotated config template
 │
 ├── core/                                # Core scripts (project-agnostic)
-│   ├── run-claude.sh                    # Agent executor (locking, resource gate, coordination)
+│   ├── run-claude.sh                    # Agent executor (orchestrator, sources lib/)
+│   ├── lib/                             # Modular components sourced by run-claude.sh
+│   │   ├── parse-args.sh               # Argument parsing (--workspace, --session, etc.)
+│   │   ├── rate-limit.sh               # Rate limit gate + stream-json detection
+│   │   ├── invoke-claude.sh            # Claude invocation with session support
+│   │   ├── setup-agent.sh              # Agent directory creation + meta.json
+│   │   ├── setup-worktree.sh           # Git worktree creation + workspace resolution
+│   │   └── cleanup-agent.sh            # EXIT trap cleanup
 │   ├── check-resources.sh               # Memory/CPU/disk threshold checks
 │   ├── process-queue.sh                 # FIFO queue drain with priority
 │   ├── clear-stale-locks.sh             # 3-tier stale process cleanup
@@ -339,7 +347,9 @@ claude-bot/                              # THE FRAMEWORK (shared across all proj
 │   ├── pr-review/
 │   ├── docs-audit/
 │   ├── security-audit/
-│   └── daily-digest/
+│   ├── daily-digest/
+│   ├── stale-sweeper/
+│   └── expert-review/                   # Multi-expert analysis (extensible expert pool)
 │
 └── docs/                                # Human-readable documentation
 ```
