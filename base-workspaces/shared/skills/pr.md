@@ -47,5 +47,5 @@ Fixes #<issue-number>
 - `Fixes #N` MUST appear for each linked issue (GitHub auto-close syntax)
 - Provenance section required on all PRs (if provenance metadata was provided)
 - Never force-push to someone else's branch
-- Do NOT hardcode reviewer names — if the project defines reviewers in a shared reference file, use those. Otherwise, skip the `--reviewer` flag and let the project's GitHub settings handle review assignment.
+- Do NOT use `--reviewer` flags or @ mention specific people — let GitHub's CODEOWNERS and branch protection rules handle review assignment automatically
 - Always add `bot:needs-review` label after creating a PR if the project uses a pr-reviewer workspace
