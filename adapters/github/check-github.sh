@@ -5,7 +5,14 @@ source "$(cd "$(dirname "$0")" && pwd)/../../core/config.sh"
 LOCKFILE="${LOCK_PREFIX}-check-github.lock"
 [ -f "$LOCKFILE" ] && exit 0
 touch "$LOCKFILE"
-trap "rm -f $LOCKFILE" EXIT
+
+# Self-imposed watchdog — if the script hangs on a GitHub API call, kill it
+# after 55s so the lockfile gets cleaned up and the next cron run can proceed.
+# Without this, a hung gh api call blocks all subsequent runs for up to 45 min
+# (until clear-stale-locks.sh hard cap kicks in).
+( sleep 55 && kill $$ 2>/dev/null ) &
+WATCHDOG_PID=$!
+trap "kill $WATCHDOG_PID 2>/dev/null; rm -f $LOCKFILE" EXIT
 
 LOGFILE="$BOT_LOG_DIR/check-github.log"
 
