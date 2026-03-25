@@ -40,9 +40,15 @@ if [ -d "$FRAMEWORK_DIR/adapters" ]; then
 fi
 
 # ── 3. Sync project repo ────────────────────────────────────────────────────
+# Pull the current branch (not necessarily DEFAULT_BRANCH) so feature branches
+# can be tested on the instance without being clobbered.
 if [ -n "$PROJECT_CHECKOUT" ] && [ -d "$PROJECT_CHECKOUT/.git" ]; then
   cd "$PROJECT_CHECKOUT"
-  git fetch origin "$DEFAULT_BRANCH" && git reset --hard "origin/$DEFAULT_BRANCH" >> "$LOGFILE" 2>&1
+  CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+  if [ -n "$CURRENT_BRANCH" ]; then
+    git fetch origin "$CURRENT_BRANCH" >> "$LOGFILE" 2>&1 && \
+    git reset --hard "origin/$CURRENT_BRANCH" >> "$LOGFILE" 2>&1 || true
+  fi
 fi
 
 # ── 4. Sync Socket Mode listener ────────────────────────────────────────────
