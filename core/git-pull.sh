@@ -25,6 +25,12 @@ fi
 if [ -d "$FRAMEWORK_DIR/core" ]; then
   cp "$FRAMEWORK_DIR"/core/*.sh "$SCRIPTS_DIR/" 2>/dev/null || true
   chmod +x "$SCRIPTS_DIR"/*.sh 2>/dev/null || true
+  # Copy lib/ subdirectory (modular components sourced by run-claude.sh)
+  if [ -d "$FRAMEWORK_DIR/core/lib" ]; then
+    mkdir -p "$SCRIPTS_DIR/lib"
+    cp "$FRAMEWORK_DIR"/core/lib/*.sh "$SCRIPTS_DIR/lib/" 2>/dev/null || true
+    chmod +x "$SCRIPTS_DIR"/lib/*.sh 2>/dev/null || true
+  fi
 fi
 
 if [ -d "$FRAMEWORK_DIR/adapters" ]; then
