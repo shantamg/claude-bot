@@ -86,7 +86,7 @@ if [ "$GITHUB_ENABLED" = "true" ] && [ "$GITHUB_NOTIFICATIONS" = "true" ]; then
   cat <<EOF
 
 # ── GitHub notifications ─────────────────────────────────────────────────────
-${GITHUB_NOTIFICATION_INTERVAL} ${SCRIPTS_DIR}/check-github.sh >> ${LOG_DIR}/cron.log 2>&1
+${GITHUB_NOTIFICATION_INTERVAL} /opt/claude-bot/adapters/github/check-github.sh >> ${LOG_DIR}/cron.log 2>&1
 EOF
 fi
 
