@@ -51,6 +51,21 @@ if [ -n "$PROJECT_CHECKOUT" ] && [ -d "$PROJECT_CHECKOUT/.git" ]; then
   fi
 fi
 
+# ── 3b. Ensure bot/staging branch exists and stays in sync ────────────────
+# Bot PRs target bot/staging by default. If the branch doesn't exist, create
+# it from the default branch. Periodically merge the default branch into it
+# so staging doesn't drift too far behind.
+if [ -n "$PROJECT_CHECKOUT" ] && [ -d "$PROJECT_CHECKOUT/.git" ]; then
+  cd "$PROJECT_CHECKOUT"
+  git fetch origin "bot/staging" >> "$LOGFILE" 2>&1 || true
+  if ! git rev-parse --verify "origin/bot/staging" >/dev/null 2>&1; then
+    # Branch doesn't exist yet — create it from the default branch
+    git branch "bot/staging" "origin/${DEFAULT_BRANCH:-main}" >> "$LOGFILE" 2>&1
+    git push origin "bot/staging" >> "$LOGFILE" 2>&1
+    echo "[$(date)] Created bot/staging from ${DEFAULT_BRANCH:-main}" >> "$LOGFILE"
+  fi
+fi
+
 # ── 4. Sync Socket Mode listener ────────────────────────────────────────────
 SOCKET_SRC="$BOT_HOME/adapters/slack"
 SOCKET_DST="$BOT_HOME/adapters/slack"
