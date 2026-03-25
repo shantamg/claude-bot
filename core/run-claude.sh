@@ -34,7 +34,12 @@ source "$SCRIPT_DIR/config.sh"
 source "$LIB_DIR/parse-args.sh" "$@"
 
 # ── Lock file ─────────────────────────────────────────────────────────────────
-# Lock strategy: session > per-message > per-command
+# Lock strategy: session > per-message > per-issue > per-command
+# Include ISSUE_NUMBER in lock/log paths when set (dispatcher passes it as env var).
+# Without this, all workspace dispatches to the same workspace (e.g., 8 issues routed
+# to general-pr) collide on a single lockfile — only the first agent runs, the rest
+# silently exit at the lock check below.
+LOCK_SUFFIX="${ISSUE_NUMBER:+-issue-${ISSUE_NUMBER}}"
 if [ -n "$SESSION_KEY" ]; then
   SAFE_KEY="${SESSION_KEY//[^a-zA-Z0-9_-]/_}"
   LOCKFILE="${LOCK_PREFIX}-${COMMAND_SLUG}-${SAFE_KEY}.lock"
@@ -44,8 +49,8 @@ elif [ -n "$MSG_TS" ]; then
   LOCKFILE="${LOCK_PREFIX}-${COMMAND_SLUG}-${SAFE_TS}.lock"
   LOGFILE="$BOT_LOG_DIR/${COMMAND_SLUG}-${SAFE_TS}.log"
 else
-  LOCKFILE="${LOCK_PREFIX}-${COMMAND_SLUG}.lock"
-  LOGFILE="$BOT_LOG_DIR/${COMMAND_SLUG}.log"
+  LOCKFILE="${LOCK_PREFIX}-${COMMAND_SLUG}${LOCK_SUFFIX}.lock"
+  LOGFILE="$BOT_LOG_DIR/${COMMAND_SLUG}${LOCK_SUFFIX}.log"
 fi
 
 # Lockfile — skip if already running
