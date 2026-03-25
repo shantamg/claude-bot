@@ -238,6 +238,18 @@ for WS_LABEL in $WS_LABELS; do
       continue
     fi
 
+    # Skip if a prerequisite label is also present (e.g., bot:milestone-builder
+    # should wait for bot:milestone-planner to finish first). Check the registry
+    # for a "requires" field — if the required label is still on the issue, defer.
+    REQUIRES_LABEL=$(jq -r --arg label "$WS_LABEL" '.labels[$label].requires // empty' "$REGISTRY_FILE" 2>/dev/null)
+    if [ -n "$REQUIRES_LABEL" ]; then
+      HAS_PREREQ=$(echo "$ITEM" | jq -r '.labels[]?.name' 2>/dev/null | grep -c "^${REQUIRES_LABEL}$" || true)
+      if [ "$HAS_PREREQ" -gt 0 ]; then
+        log "Deferring #$ISSUE_NUMBER ($ISSUE_TITLE) — waiting for $REQUIRES_LABEL to finish"
+        continue
+      fi
+    fi
+
     # Re-check concurrency inside the loop
     RUNNING=$(count_running_agents)
     if [ "$RUNNING" -ge "$MAX_CONCURRENT" ]; then
