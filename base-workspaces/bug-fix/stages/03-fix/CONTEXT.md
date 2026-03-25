@@ -79,7 +79,7 @@ Fixes #{issue-number}.
 
 ---
 
-*Automated fix by claude-bot ([bug-fix workspace](https://github.com/shantamg/claude-bot))*
+*Automated fix by claude-bot (bug-fix workspace)*
 EOF
 )"
 ```
