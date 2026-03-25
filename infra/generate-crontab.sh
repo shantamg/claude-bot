@@ -23,6 +23,11 @@ if [ ! -f "$BOT_YAML" ]; then
   exit 1
 fi
 
+if ! command -v yq &>/dev/null; then
+  echo "Error: yq is not installed. Install with: brew install yq (macOS) or see https://github.com/mikefarah/yq" >&2
+  exit 1
+fi
+
 # ── Helper: read a value from bot.yaml with a default ─────────────────────────
 _yaml() {
   yq -r "$1" "$BOT_YAML" 2>/dev/null || echo "$2"

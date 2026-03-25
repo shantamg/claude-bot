@@ -42,6 +42,17 @@ BOT_HOME="${CLAUDE_BOT_HOME:-/opt/claude-bot}"
 source "$BOT_HOME/.env" 2>/dev/null || true
 
 # ── Read bot.yaml ───────────────────────────────────────────────────────────────
+if ! command -v yq &>/dev/null; then
+  echo "FATAL: yq is not installed. config.sh cannot read bot.yaml." >&2
+  echo "Install: sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && sudo chmod +x /usr/local/bin/yq" >&2
+  exit 1
+fi
+
+if [ ! -f "$BOT_HOME/bot.yaml" ]; then
+  echo "FATAL: $BOT_HOME/bot.yaml not found. Create a symlink to your project's bot/bot.yaml." >&2
+  exit 1
+fi
+
 _yaml() {
   yq -r "$1" "$BOT_HOME/bot.yaml" 2>/dev/null || echo "$2"
 }

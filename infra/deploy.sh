@@ -20,6 +20,11 @@ if [ ! -f "$BOT_YAML" ]; then
   exit 1
 fi
 
+if ! command -v yq &>/dev/null; then
+  echo "Error: yq is not installed. Install with: brew install yq"
+  exit 1
+fi
+
 HOST=$(yq -r '.name // "claude-bot"' "$BOT_YAML")
 BOT_NAME="$HOST"
 BOT_HOME="/opt/claude-bot"
