@@ -324,7 +324,7 @@ ${ENTRY_STAGE:-Then follow the workspace CONTEXT.md instructions to process it.}
     # Launch in background, update claim with actual PID
     (
       set +e
-      PRIORITY=normal "$SCRIPTS_DIR/run-claude.sh" --workspace "$WORKSPACE" $SESSION_FLAG "$PROMPT"
+      ISSUE_NUMBER="$ISSUE_NUMBER" PRIORITY=normal "$SCRIPTS_DIR/run-claude.sh" --workspace "$WORKSPACE" $SESSION_FLAG "$PROMPT"
       EXIT_CODE=$?
 
       # Clean up claim on completion
