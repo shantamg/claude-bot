@@ -58,7 +58,9 @@ CLAIMS_DIR="$STATE_DIR/claims"
 # ── Project paths ───────────────────────────────────────────────────────────────
 PROJECT_REPO=$(_yaml '.project.repo // ""' "")
 PROJECT_PATH=$(_yaml '.project.path // ""' "")
+# Expand ~ to $HOME (yq returns literal ~ which doesn't expand in double quotes)
 PROJECT_CHECKOUT=$(_yaml '.project.checkout // ""' "")
+PROJECT_CHECKOUT="${PROJECT_CHECKOUT/#\~/$HOME}"
 BOT_USERNAME=$(_yaml '.project.bot_username // ""' "")
 DEFAULT_BRANCH=$(_yaml '.project.default_branch // "main"' "main")
 
