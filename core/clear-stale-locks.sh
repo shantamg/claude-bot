@@ -213,8 +213,24 @@ fi
 # ── Clean up orphaned worktrees (from hard kills where trap didn't run) ───────
 if [ -n "$PROJECT_CHECKOUT" ] && [ -d "$PROJECT_CHECKOUT" ]; then
   cd "$PROJECT_CHECKOUT" 2>/dev/null && git worktree prune 2>/dev/null
-  # Remove stale worktree temp dirs
+  # Remove stale worktree temp dirs (created by run-claude.sh)
   find /tmp -maxdepth 1 -name "${BOT_NAME}-worktree-*" -mmin +20 -exec rm -rf {} \; 2>/dev/null
+  # Remove stale Claude Code worktrees (created by Claude's Agent tool).
+  # These live at $PROJECT_CHECKOUT/.claude/worktrees/ and can accumulate
+  # when agents are killed without cleanup — each is a full repo copy.
+  CLAUDE_WT_DIR="$PROJECT_CHECKOUT/.claude/worktrees"
+  if [ -d "$CLAUDE_WT_DIR" ]; then
+    for WT_DIR in "$CLAUDE_WT_DIR"/agent-*; do
+      [ -d "$WT_DIR" ] || continue
+      # Only remove if older than 60 minutes (active agents may still use them)
+      WT_AGE_MIN=$(( ($(date +%s) - $(stat -c %Y "$WT_DIR" 2>/dev/null || stat -f %m "$WT_DIR" 2>/dev/null || echo "0")) / 60 ))
+      if [ "$WT_AGE_MIN" -gt 60 ]; then
+        git worktree remove "$WT_DIR" --force 2>/dev/null || rm -rf "$WT_DIR" 2>/dev/null
+        echo "[$(date)] Removed stale Claude worktree: $(basename "$WT_DIR") (${WT_AGE_MIN}m old)" >> "$LOGFILE"
+      fi
+    done
+    git worktree prune 2>/dev/null
+  fi
   # Remove stale bot branches not in use by any worktree
   for BRANCH in $(git branch --list 'bot/*' 2>/dev/null | tr -d ' *'); do
     if ! git worktree list 2>/dev/null | grep -q "$BRANCH"; then
