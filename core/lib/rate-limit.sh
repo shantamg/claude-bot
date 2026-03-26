@@ -79,7 +79,9 @@ rate_limit_detect() {
   local bot_ops="${BOT_OPS_CHANNEL_ID:-}"
   local rl_resets_at_flag rl_reset_human
   rl_resets_at_flag=$(cat "$RATE_LIMIT_FLAG" 2>/dev/null || echo "0")
-  rl_reset_human=$(date -u -d "@$rl_resets_at_flag" "+%H:%M UTC" 2>/dev/null \
+  rl_reset_human=$(TZ=America/Los_Angeles date -d "@$rl_resets_at_flag" "+%-I:%M %p PT" 2>/dev/null \
+    || TZ=America/Los_Angeles date -r "$rl_resets_at_flag" "+%-I:%M %p PT" 2>/dev/null \
+    || date -u -d "@$rl_resets_at_flag" "+%H:%M UTC" 2>/dev/null \
     || date -u -r "$rl_resets_at_flag" "+%H:%M UTC" 2>/dev/null \
     || echo "unknown")
 
