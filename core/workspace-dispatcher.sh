@@ -165,6 +165,12 @@ if [ "${1:-}" = "--scheduled" ]; then
     exit 0
   fi
 
+  # Resource check for scheduled jobs too
+  if ! "$SCRIPTS_DIR/check-resources.sh" > /dev/null 2>&1; then
+    log "Skipping scheduled $SCHED_WORKSPACE — system resources insufficient"
+    exit 0
+  fi
+
   PRIORITY=low "$SCRIPTS_DIR/run-claude.sh" --workspace "$SCHED_WORKSPACE" "$SCHED_PROMPT" &
   log "Launched scheduled workspace=$SCHED_WORKSPACE (PID $!, priority=low)"
   exit 0
@@ -255,6 +261,15 @@ for WS_LABEL in $WS_LABELS; do
     if [ "$RUNNING" -ge "$MAX_CONCURRENT" ]; then
       log "Concurrency limit ($RUNNING/$MAX_CONCURRENT) — deferring #$ISSUE_NUMBER"
       continue
+    fi
+
+    # Resource check — don't dispatch if system is overloaded (memory, CPU, disk).
+    # Without this, the dispatcher keeps launching agents even when load > 3.0,
+    # eventually crashing the instance.
+    if ! "$SCRIPTS_DIR/check-resources.sh" > /dev/null 2>&1; then
+      RESOURCE_MSG=$("$SCRIPTS_DIR/check-resources.sh" 2>&1 || true)
+      log "Resources insufficient — deferring #$ISSUE_NUMBER ($RESOURCE_MSG)"
+      break  # Stop dispatching entirely this cycle — system needs to recover
     fi
 
     # Skip if already being worked on
