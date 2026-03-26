@@ -187,6 +187,22 @@ $ACTIVE_ENTRIES
 "
 fi
 
+# ── Load persona context if specified ─────────────────────────────────────────
+PERSONA_CONTEXT=""
+if [ -n "${PERSONA:-}" ]; then
+  PERSONA_DIR="$WORKSPACES_DIR/_personas/$PERSONA"
+  if [ ! -d "$PERSONA_DIR" ] && [ -d "$BASE_WORKSPACES_DIR/_personas/$PERSONA" ]; then
+    PERSONA_DIR="$BASE_WORKSPACES_DIR/_personas/$PERSONA"
+  fi
+  if [ -f "$PERSONA_DIR/WHOAMI.md" ]; then
+    PERSONA_CONTEXT="
+[PERSONA]
+$(cat "$PERSONA_DIR/WHOAMI.md")
+[END PERSONA]
+"
+  fi
+fi
+
 # ── Build provenance block ───────────────────────────────────────────────────
 PROVENANCE_BLOCK=""
 if [ -n "${PROVENANCE_REQUESTER:-}" ] || [ -n "${PROVENANCE_CHANNEL:-}" ]; then

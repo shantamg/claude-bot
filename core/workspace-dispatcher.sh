@@ -348,10 +348,13 @@ ${ENTRY_STAGE:-Then follow the workspace CONTEXT.md instructions to process it.}
       SESSION_FLAG="--session ws-${WORKSPACE}-${ISSUE_NUMBER}"
     fi
 
+    # Extract persona from label-registry entry (if specified)
+    PERSONA=$(jq -r --arg label "$WS_LABEL" '.labels[$label].persona // empty' "$REGISTRY_FILE" 2>/dev/null)
+
     # Launch in background, update claim with actual PID
     (
       set +e
-      ISSUE_NUMBER="$ISSUE_NUMBER" PRIORITY=normal "$SCRIPTS_DIR/run-claude.sh" --workspace "$WORKSPACE" $SESSION_FLAG "$PROMPT"
+      ISSUE_NUMBER="$ISSUE_NUMBER" PERSONA="${PERSONA:-}" PRIORITY=normal "$SCRIPTS_DIR/run-claude.sh" --workspace "$WORKSPACE" $SESSION_FLAG "$PROMPT"
       EXIT_CODE=$?
 
       # Clean up claim on completion
