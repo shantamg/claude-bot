@@ -187,6 +187,28 @@ $ACTIVE_ENTRIES
 "
 fi
 
+# ── Load persona context if specified ─────────────────────────────────────────
+# When a label-registry entry has a "persona" field, the dispatcher exports it
+# as PERSONA env var. Load the persona's WHOAMI.md to give the agent an identity.
+PERSONA_CONTEXT=""
+if [ -n "${PERSONA:-}" ]; then
+  # Cascade: project personas first, then base-workspaces personas
+  PERSONA_DIR=""
+  if [ -d "${WORKSPACES_DIR:-}/_personas/$PERSONA" ]; then
+    PERSONA_DIR="${WORKSPACES_DIR}/_personas/$PERSONA"
+  elif [ -d "${BASE_WORKSPACES_DIR:-}/_personas/$PERSONA" ]; then
+    PERSONA_DIR="${BASE_WORKSPACES_DIR}/_personas/$PERSONA"
+  fi
+  if [ -n "$PERSONA_DIR" ] && [ -f "$PERSONA_DIR/WHOAMI.md" ]; then
+    PERSONA_CONTEXT="
+[PERSONA]
+$(cat "$PERSONA_DIR/WHOAMI.md")
+[END PERSONA]
+"
+    echo "[$(date)] Loaded persona: $PERSONA from $PERSONA_DIR" >> "$LOGFILE"
+  fi
+fi
+
 # ── Build provenance block ───────────────────────────────────────────────────
 PROVENANCE_BLOCK=""
 if [ -n "${PROVENANCE_REQUESTER:-}" ] || [ -n "${PROVENANCE_CHANNEL:-}" ]; then

@@ -294,6 +294,9 @@ for WS_LABEL in $WS_LABELS; do
     # like expert-review that need the label to persist across invocations)
     KEEP_LABEL=$(jq -r --arg label "$WS_LABEL" '.labels[$label].keep_label // false' "$REGISTRY_FILE" 2>/dev/null)
 
+    # Extract optional persona for identity-scoped context loading
+    PERSONA=$(jq -r --arg label "$WS_LABEL" '.labels[$label].persona // empty' "$REGISTRY_FILE" 2>/dev/null)
+
     # Verify workspace directory exists using cascade resolution (project → base-workspaces)
     RESOLVED_WS_PATH=$(resolve_workspace "$WORKSPACE") || true
     if [ -z "$RESOLVED_WS_PATH" ]; then
@@ -351,7 +354,7 @@ ${ENTRY_STAGE:-Then follow the workspace CONTEXT.md instructions to process it.}
     # Launch in background, update claim with actual PID
     (
       set +e
-      ISSUE_NUMBER="$ISSUE_NUMBER" PRIORITY=normal "$SCRIPTS_DIR/run-claude.sh" --workspace "$WORKSPACE" $SESSION_FLAG "$PROMPT"
+      ISSUE_NUMBER="$ISSUE_NUMBER" PERSONA="${PERSONA:-}" PRIORITY=normal "$SCRIPTS_DIR/run-claude.sh" --workspace "$WORKSPACE" $SESSION_FLAG "$PROMPT"
       EXIT_CODE=$?
 
       # Clean up claim on completion

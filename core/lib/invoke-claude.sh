@@ -9,9 +9,9 @@ RAW_STREAM="$AGENT_HOME/raw-stream.jsonl"
 
 # Build input from prompt file or inline prompt
 if [ -n "$PROMPT_FILE" ] && [ -f "$PROMPT_FILE" ]; then
-  CLAUDE_INPUT=$({ echo "$ACTIVE_CONTEXT"; echo "$PROVENANCE_BLOCK"; cat "$PROMPT_FILE"; })
+  CLAUDE_INPUT=$({ echo "$ACTIVE_CONTEXT"; echo "${PERSONA_CONTEXT:-}"; echo "$PROVENANCE_BLOCK"; cat "$PROMPT_FILE"; })
 else
-  CLAUDE_INPUT="${ACTIVE_CONTEXT}${PROVENANCE_BLOCK}${PROMPT}"
+  CLAUDE_INPUT="${ACTIVE_CONTEXT}${PERSONA_CONTEXT:-}${PROVENANCE_BLOCK}${PROMPT}"
 fi
 
 # Base claude args (always used)
