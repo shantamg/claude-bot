@@ -44,6 +44,14 @@ if [ -d "$REPO_ROOT/core/lib" ]; then
   ssh "$HOST" "chmod +x $BOT_HOME/scripts/lib/*.sh"
 fi
 
+# Sync memory/ subdirectory (embedding pipeline)
+if [ -d "$REPO_ROOT/core/memory" ]; then
+  echo "Syncing memory/ scripts..."
+  ssh "$HOST" "mkdir -p $BOT_HOME/scripts/memory"
+  scp -q "$REPO_ROOT"/core/memory/*.py "$HOST:$BOT_HOME/scripts/memory/"
+  scp -q "$REPO_ROOT"/core/memory/README.md "$HOST:$BOT_HOME/scripts/memory/" 2>/dev/null || true
+fi
+
 # ── Sync adapters ────────────────────────────────────────────────────────────
 echo "Syncing Slack adapter..."
 ssh "$HOST" "mkdir -p $BOT_HOME/adapters/slack"
