@@ -94,6 +94,7 @@ try {
         logName: ch.name.replace(/[^a-zA-Z0-9]/g, '-').replace(/^-+|-+$/g, ''),
         channelName: ch.name,
         workspace: ch.workspace,
+        persona: ch.persona || '',
         contextCount: ch.context_count || 10,
       };
     }
@@ -326,6 +327,7 @@ function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey
         LOVELY_BOT: '1', // backward compat
         PRIORITY: 'high',
         CHANNEL: channel,
+        PERSONA: config.persona || '',
         PROVENANCE_CHANNEL: provenance.channel || '',
         PROVENANCE_REQUESTER: provenance.requester || '',
         PROVENANCE_MESSAGE: provenance.message || '',
