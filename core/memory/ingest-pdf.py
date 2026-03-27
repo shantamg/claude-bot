@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Ingest a PDF into a vector memory collection.
+"""Ingest a PDF into a vector memory collection using structure-aware chunking.
 
-Extracts text from each page, chunks by section/page, and embeds into
-the specified collection (default: 'science').
+Converts PDF to markdown (preserving headings, tables, structure), then
+chunks on heading boundaries so each chunk is a meaningful section with
+its heading hierarchy as metadata.
 
 Usage:
     # Ingest a single PDF
@@ -10,7 +11,7 @@ Usage:
 
     # Ingest with custom metadata
     python3 ingest-pdf.py --file paper.pdf --collection science \
-        --title "PCIT Manual" --author "Eyberg" --tags "pcit,methodology"
+        --title "DPICS Manual" --author "Eyberg" --tags "pcit,dpics,coding"
 
     # Ingest all PDFs in a directory
     python3 ingest-pdf.py --dir /path/to/papers/ --collection science
@@ -19,7 +20,7 @@ Usage:
     python3 ingest-pdf.py --file paper.pdf --dry-run
 
 Requirements:
-    pip install pymupdf  (or: pip install PyMuPDF)
+    pip install pymupdf4llm
 """
 
 import argparse
@@ -27,6 +28,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -43,52 +45,142 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# Target chunk size in characters (aim for ~500 tokens ≈ 2000 chars)
-CHUNK_SIZE = 2000
-CHUNK_OVERLAP = 200
+# Max chunk size — if a section exceeds this, split on paragraphs
+MAX_CHUNK_CHARS = 3000
+# Min chunk size — merge tiny sections with the next one
+MIN_CHUNK_CHARS = 200
 
 
-def extract_text_from_pdf(pdf_path: str) -> list[dict]:
-    """Extract text from each page of a PDF. Returns list of {page, text}."""
+def pdf_to_markdown(pdf_path: str) -> str:
+    """Convert PDF to markdown using pymupdf4llm."""
     try:
-        import fitz  # pymupdf
+        import pymupdf4llm
     except ImportError:
-        log.error("pymupdf not installed. Run: pip install pymupdf")
+        log.error("pymupdf4llm not installed. Run: pip install pymupdf4llm")
         sys.exit(1)
 
-    doc = fitz.open(pdf_path)
-    pages = []
-    for i, page in enumerate(doc):
-        text = page.get_text().strip()
-        if text:
-            pages.append({"page": i + 1, "text": text})
-    doc.close()
-    return pages
+    return pymupdf4llm.to_markdown(pdf_path)
 
 
-def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
-    """Split text into overlapping chunks."""
-    if len(text) <= chunk_size:
-        return [text]
+def parse_heading(line: str) -> tuple[int, str] | None:
+    """Parse a markdown heading line. Returns (level, text) or None."""
+    match = re.match(r"^(#{1,6})\s+(.+)$", line.strip())
+    if match:
+        return len(match.group(1)), match.group(2).strip()
+    return None
 
+
+def chunk_by_headings(markdown: str) -> list[dict]:
+    """Split markdown into chunks based on heading structure.
+
+    Each chunk contains:
+    - text: the section content (heading + body)
+    - heading: the section heading
+    - parent_headings: list of ancestor headings (for context)
+    - level: heading level (1-6)
+    """
+    lines = markdown.split("\n")
     chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        # Try to break at a paragraph or sentence boundary
-        if end < len(text):
-            # Look for paragraph break
-            para_break = text.rfind("\n\n", start + chunk_size // 2, end)
-            if para_break > start:
-                end = para_break
-            else:
-                # Look for sentence break
-                sent_break = text.rfind(". ", start + chunk_size // 2, end)
-                if sent_break > start:
-                    end = sent_break + 1
-        chunks.append(text[start:end].strip())
-        start = end - overlap
-    return [c for c in chunks if c]
+    current_chunk_lines = []
+    current_heading = ""
+    current_level = 0
+    # Track heading hierarchy for parent context
+    heading_stack = []  # list of (level, heading)
+
+    def flush_chunk():
+        nonlocal current_chunk_lines, current_heading, current_level
+        text = "\n".join(current_chunk_lines).strip()
+        if not text:
+            return
+        # Build parent headings from stack
+        parents = [h for _, h in heading_stack if _ < current_level] if current_level > 0 else []
+        chunks.append({
+            "text": text,
+            "heading": current_heading,
+            "parent_headings": parents,
+            "level": current_level,
+        })
+        current_chunk_lines = []
+
+    for line in lines:
+        parsed = parse_heading(line)
+        if parsed:
+            level, heading_text = parsed
+            # Flush previous chunk
+            flush_chunk()
+            # Update heading stack — remove headings at same or deeper level
+            heading_stack = [(l, h) for l, h in heading_stack if l < level]
+            heading_stack.append((level, heading_text))
+            current_heading = heading_text
+            current_level = level
+            current_chunk_lines = [line]
+        else:
+            current_chunk_lines.append(line)
+
+    # Flush last chunk
+    flush_chunk()
+
+    return chunks
+
+
+def split_large_chunk(chunk: dict, max_chars: int = MAX_CHUNK_CHARS) -> list[dict]:
+    """Split a chunk that exceeds max_chars on paragraph boundaries."""
+    text = chunk["text"]
+    if len(text) <= max_chars:
+        return [chunk]
+
+    # Split on double newlines (paragraphs)
+    paragraphs = re.split(r"\n\n+", text)
+    sub_chunks = []
+    current_text = ""
+
+    for para in paragraphs:
+        if len(current_text) + len(para) > max_chars and current_text:
+            sub_chunks.append({
+                **chunk,
+                "text": current_text.strip(),
+                "heading": chunk["heading"],
+                "sub_chunk": len(sub_chunks),
+            })
+            current_text = para
+        else:
+            current_text = current_text + "\n\n" + para if current_text else para
+
+    if current_text.strip():
+        sub_chunks.append({
+            **chunk,
+            "text": current_text.strip(),
+            "heading": chunk["heading"],
+            "sub_chunk": len(sub_chunks),
+        })
+
+    return sub_chunks
+
+
+def merge_small_chunks(chunks: list[dict], min_chars: int = MIN_CHUNK_CHARS) -> list[dict]:
+    """Merge chunks smaller than min_chars with the next chunk."""
+    if not chunks:
+        return chunks
+
+    merged = []
+    i = 0
+    while i < len(chunks):
+        chunk = chunks[i]
+        # If this chunk is tiny and there's a next chunk at the same or deeper level
+        if len(chunk["text"]) < min_chars and i + 1 < len(chunks):
+            next_chunk = chunks[i + 1]
+            # Merge into next chunk
+            merged_text = chunk["text"] + "\n\n" + next_chunk["text"]
+            merged.append({
+                **next_chunk,
+                "text": merged_text,
+            })
+            i += 2  # skip both
+        else:
+            merged.append(chunk)
+            i += 1
+
+    return merged
 
 
 def content_hash(text: str) -> str:
@@ -108,49 +200,80 @@ def ingest_pdf(
     filename = os.path.basename(pdf_path)
     title = title or filename.replace(".pdf", "").replace("_", " ").replace("-", " ")
 
-    log.info(f"Extracting text from: {filename}")
-    pages = extract_text_from_pdf(pdf_path)
-    if not pages:
-        log.warning(f"No text extracted from {filename}")
+    log.info(f"Converting to markdown: {filename}")
+    markdown = pdf_to_markdown(pdf_path)
+    if not markdown.strip():
+        log.warning(f"No content extracted from {filename}")
         return 0
 
-    log.info(f"Extracted {len(pages)} pages")
+    log.info(f"Extracted {len(markdown)} chars of markdown")
 
-    # Chunk all pages
-    chunks = []
-    for page_info in pages:
-        page_chunks = chunk_text(page_info["text"])
-        for i, chunk in enumerate(page_chunks):
-            chunks.append({
-                "id": f"pdf:{content_hash(pdf_path)}:p{page_info['page']}:c{i}",
-                "text": chunk,
-                "metadata": json.dumps({
-                    "source": "pdf",
-                    "file": filename,
-                    "title": title,
-                    "author": author,
-                    "tags": tags,
-                    "page": page_info["page"],
-                    "chunk": i,
-                }),
-            })
+    # Structure-aware chunking
+    log.info("Chunking by headings...")
+    raw_chunks = chunk_by_headings(markdown)
+    log.info(f"Found {len(raw_chunks)} heading-based sections")
 
-    log.info(f"Created {len(chunks)} chunks from {len(pages)} pages")
+    # Split oversized chunks and merge tiny ones
+    processed = []
+    for chunk in raw_chunks:
+        processed.extend(split_large_chunk(chunk))
+    processed = merge_small_chunks(processed)
+    log.info(f"After split/merge: {len(processed)} chunks")
+
+    # Build final chunks with IDs and metadata
+    file_hash = content_hash(pdf_path)
+    final_chunks = []
+    for i, chunk in enumerate(processed):
+        # Build a rich context prefix for the embedding
+        context_prefix = ""
+        if chunk["parent_headings"]:
+            context_prefix = " > ".join(chunk["parent_headings"]) + " > "
+        if chunk["heading"]:
+            context_prefix += chunk["heading"] + "\n\n"
+
+        embed_text = context_prefix + chunk["text"]
+
+        sub = chunk.get("sub_chunk", "")
+        chunk_id = f"pdf:{file_hash}:s{i}" + (f":p{sub}" if sub else "")
+
+        final_chunks.append({
+            "id": chunk_id,
+            "text": chunk["text"],
+            "embed_text": embed_text,
+            "metadata": json.dumps({
+                "source": "pdf",
+                "file": filename,
+                "title": title,
+                "author": author,
+                "tags": tags,
+                "heading": chunk["heading"],
+                "parent_headings": chunk["parent_headings"],
+                "level": chunk["level"],
+            }),
+        })
+
+    log.info(f"Final: {len(final_chunks)} chunks ready to embed")
 
     if dry_run:
-        for c in chunks[:3]:
-            log.info(f"  Chunk {c['id']}: {c['text'][:100]}...")
-        log.info(f"  ... ({len(chunks)} total, dry run — not embedding)")
-        return len(chunks)
+        for c in final_chunks[:5]:
+            meta = json.loads(c["metadata"])
+            parents = " > ".join(meta["parent_headings"]) if meta["parent_headings"] else ""
+            heading = meta["heading"]
+            path = f"{parents} > {heading}" if parents else heading
+            log.info(f"  [{path}] ({len(c['text'])} chars): {c['text'][:80]}...")
+        if len(final_chunks) > 5:
+            log.info(f"  ... ({len(final_chunks)} total)")
+        return len(final_chunks)
 
     # Embed and store
     db = init_db()
 
-    texts = [c["text"] for c in chunks]
-    log.info(f"Embedding {len(texts)} chunks...")
+    # Embed using the context-enriched text (includes heading hierarchy)
+    texts = [c["embed_text"] for c in final_chunks]
+    log.info(f"Embedding {len(texts)} chunks via Bedrock Titan...")
     embeddings = get_embeddings(texts)
 
-    for chunk, embedding in zip(chunks, embeddings):
+    for chunk, embedding in zip(final_chunks, embeddings):
         db.execute(
             f"""INSERT OR REPLACE INTO {collection}_chunks
                 (id, content, metadata, embedding)
@@ -159,8 +282,8 @@ def ingest_pdf(
         )
 
     db.commit()
-    log.info(f"Ingested {len(chunks)} chunks from {filename} into '{collection}' collection")
-    return len(chunks)
+    log.info(f"Ingested {len(final_chunks)} chunks from {filename} into '{collection}' collection")
+    return len(final_chunks)
 
 
 def main():
