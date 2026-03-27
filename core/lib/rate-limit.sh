@@ -24,7 +24,14 @@ rate_limit_gate() {
 
   # Rate limit has reset — but investigation may still be pending
   if [ -f "$RATE_LIMIT_INVESTIGATE_PENDING" ]; then
-    if [ "$COMMAND_SLUG" = "rate-limit-investigate" ]; then
+    # Safety: if the investigation has been pending for more than 60 minutes past
+    # the reset time, the investigation task was lost. Clear the flag and resume
+    # rather than blocking all agents indefinitely.
+    PENDING_AGE_SEC=$(( $(date +%s) - $(stat -c %Y "$RATE_LIMIT_INVESTIGATE_PENDING" 2>/dev/null || stat -f %m "$RATE_LIMIT_INVESTIGATE_PENDING" 2>/dev/null || echo "0") ))
+    if [ "$PENDING_AGE_SEC" -gt 3600 ]; then
+      echo "[$(date)] Investigation pending for ${PENDING_AGE_SEC}s (>1hr) — clearing stale flag and resuming" >> "$LOGFILE"
+      rm -f "$RATE_LIMIT_FLAG" "$RATE_LIMIT_INVESTIGATE_PENDING" "${LOCK_PREFIX}-rate-limit-snapshot.txt" 2>/dev/null || true
+    elif [ "$COMMAND_SLUG" = "rate-limit-investigate" ]; then
       echo "[$(date)] Rate limit reset — running investigation" >> "$LOGFILE"
       rm -f "$RATE_LIMIT_FLAG" "$RATE_LIMIT_INVESTIGATE_PENDING" "${LOCK_PREFIX}-rate-limit-snapshot.txt" 2>/dev/null || true
     else
