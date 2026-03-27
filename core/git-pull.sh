@@ -68,21 +68,26 @@ if [ -n "$PROJECT_CHECKOUT" ] && [ -d "$PROJECT_CHECKOUT/.git" ]; then
 fi
 
 # ── 3c. Sync code embeddings (incremental) ──────────────────────────────────
-# After pulling the project repo, run the code sync script to update vector
-# memory with any changed files. Runs in the background to avoid blocking.
-# CRITICAL: guard with a lockfile — without this, every git-pull (every minute)
-# spawns a new ~120MB Python process. Multiple concurrent syncs OOM the instance.
+# Only run if: (a) no sync already running, (b) system load is low, (c) there
+# are actually changed files to sync. A full initial sync of 600+ files can
+# consume 120MB+ RAM and saturate Bedrock API for 30+ minutes — too much for
+# a t3.medium alongside active agents.
 SYNC_SCRIPT="$SCRIPTS_DIR/memory/sync-code.py"
 SYNC_LOCK="/tmp/${BOT_NAME:-claude-bot}-code-sync.lock"
 if [ -f "$SYNC_SCRIPT" ] && [ -n "$PROJECT_CHECKOUT" ] && [ -d "$PROJECT_CHECKOUT/.git" ]; then
   if [ -f "$SYNC_LOCK" ] && kill -0 "$(cat "$SYNC_LOCK" 2>/dev/null)" 2>/dev/null; then
     : # Sync already running — skip
   else
-    (
-      echo "$$" > "$SYNC_LOCK"
-      python3 "$SYNC_SCRIPT" --repo "$PROJECT_CHECKOUT" >> "$BOT_LOG_DIR/code-sync.log" 2>&1
-      rm -f "$SYNC_LOCK"
-    ) &
+    # Only sync if load is low enough (< 1.5 on a 2-vCPU machine)
+    LOAD=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo "99")
+    if awk "BEGIN {exit !($LOAD < 1.5)}" 2>/dev/null; then
+      (
+        echo "$$" > "$SYNC_LOCK"
+        # Use nice to lower CPU priority so agents aren't starved
+        nice -n 15 python3 "$SYNC_SCRIPT" --repo "$PROJECT_CHECKOUT" >> "$BOT_LOG_DIR/code-sync.log" 2>&1
+        rm -f "$SYNC_LOCK"
+      ) &
+    fi
   fi
 fi
 
@@ -96,11 +101,14 @@ if [ -f "$ISSUES_SYNC_SCRIPT" ] && [ -n "$ISSUES_REPO" ]; then
   if [ -f "$ISSUES_SYNC_LOCK" ] && kill -0 "$(cat "$ISSUES_SYNC_LOCK" 2>/dev/null)" 2>/dev/null; then
     : # Sync already running — skip
   else
-    (
-      echo "$$" > "$ISSUES_SYNC_LOCK"
-      python3 "$ISSUES_SYNC_SCRIPT" --repo "$ISSUES_REPO" >> "$BOT_LOG_DIR/issues-sync.log" 2>&1
-      rm -f "$ISSUES_SYNC_LOCK"
-    ) &
+    LOAD=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo "99")
+    if awk "BEGIN {exit !($LOAD < 1.5)}" 2>/dev/null; then
+      (
+        echo "$$" > "$ISSUES_SYNC_LOCK"
+        nice -n 15 python3 "$ISSUES_SYNC_SCRIPT" --repo "$ISSUES_REPO" >> "$BOT_LOG_DIR/issues-sync.log" 2>&1
+        rm -f "$ISSUES_SYNC_LOCK"
+      ) &
+    fi
   fi
 fi
 
