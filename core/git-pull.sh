@@ -5,6 +5,7 @@
 #   1. Sync the claude-bot framework repo (~/claude-bot)
 #   2. Copy framework scripts/adapters to /opt/claude-bot/
 #   3. Sync the project repo
+#   3c. Trigger incremental code embedding sync (background)
 #   4. Sync Socket Mode listener (checksum-based restart on code change)
 #   5. Auto-sync crontab (generated from bot.yaml, not a static file)
 set -euo pipefail
@@ -64,6 +65,14 @@ if [ -n "$PROJECT_CHECKOUT" ] && [ -d "$PROJECT_CHECKOUT/.git" ]; then
     git push origin "bot/staging" >> "$LOGFILE" 2>&1
     echo "[$(date)] Created bot/staging from ${DEFAULT_BRANCH:-main}" >> "$LOGFILE"
   fi
+fi
+
+# ── 3c. Sync code embeddings (incremental) ──────────────────────────────────
+# After pulling the project repo, run the code sync script to update vector
+# memory with any changed files. Runs in the background to avoid blocking.
+SYNC_SCRIPT="$SCRIPTS_DIR/memory/sync-code.py"
+if [ -f "$SYNC_SCRIPT" ] && [ -n "$PROJECT_CHECKOUT" ] && [ -d "$PROJECT_CHECKOUT/.git" ]; then
+  python3 "$SYNC_SCRIPT" --repo "$PROJECT_CHECKOUT" >> "$BOT_LOG_DIR/code-sync.log" 2>&1 &
 fi
 
 # ── 4. Sync Socket Mode listener ────────────────────────────────────────────
