@@ -102,6 +102,17 @@ if [ -n "$SCHEDULE_KEYS" ]; then
 # reserving slots for interactive work (GitHub mentions, Slack messages).
 EOF
 
+# ── Memory sync jobs ──────────────────────────────────────────────────────
+MEMORY_SYNC_ISSUES=$(_yaml '.infrastructure.memory_sync_issues // ""' "")
+if [ -n "$MEMORY_SYNC_ISSUES" ]; then
+  REPO=$(_yaml '.project.repo // ""' "")
+  if [ -n "$REPO" ]; then
+    echo ""
+    echo "# ── Memory sync (vector embedding pipeline) ─────────────────────────────"
+    echo "${MEMORY_SYNC_ISSUES} cd ${SCRIPTS_DIR}/memory && python3 sync-issues.py --repo ${REPO} >> ${LOG_DIR}/memory-sync.log 2>&1"
+  fi
+fi
+
   while IFS= read -r schedule_name; do
     [ -z "$schedule_name" ] && continue
 
