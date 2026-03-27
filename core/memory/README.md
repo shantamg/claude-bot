@@ -37,6 +37,9 @@ The `embeddings` and `vec_embeddings` tables are linked by rowid. Every metadata
 | `init_db.py` | Create/migrate the database schema |
 | `embed.py` | Generate embeddings via Bedrock Titan V2 |
 | `query.py` | Insert, search, and delete operations |
+| `mcp-memory-server.py` | FastMCP server exposing semantic search to agents |
+| `search.sh` | Shell wrapper for workspaces that prefer CLI access |
+| `memory-scope.yaml` | Persona → collection access control mapping |
 
 ## Usage
 
@@ -77,9 +80,65 @@ for r in results:
 store.close()
 ```
 
+## MCP Server
+
+The MCP server exposes three tools to Claude agents:
+
+- `search_memory(query, collections, top_k)` — search specific collections
+- `search_project_history(query, top_k)` — convenience wrapper for issues + docs
+- `search_code(query, top_k)` — convenience wrapper for code collection
+
+Start the server:
+
+```bash
+CLAUDE_PERSONA=engineer python3 /opt/claude-bot/scripts/memory/mcp-memory-server.py
+```
+
+Add to `.mcp.json` to make it available to agents:
+
+```json
+{
+  "memory": {
+    "command": "python3",
+    "args": ["/opt/claude-bot/scripts/memory/mcp-memory-server.py"],
+    "env": { "CLAUDE_PERSONA": "engineer" }
+  }
+}
+```
+
+### Persona Scoping
+
+`memory-scope.yaml` controls which collections each persona can access:
+
+| Persona | Collections |
+|---------|------------|
+| engineer | code, issues, docs, prs |
+| product-manager | issues, docs, brainstorms, slack |
+| default | issues, docs |
+
+The server reads `CLAUDE_PERSONA` from the environment. Requests for collections outside the persona's scope are silently filtered.
+
+## Shell Wrapper
+
+For workspaces that prefer shell-based access:
+
+```bash
+# Search project history (issues + docs)
+/opt/claude-bot/scripts/memory/search.sh "authentication error"
+
+# Search code
+/opt/claude-bot/scripts/memory/search.sh --code "rate limiting"
+
+# Search specific collections
+/opt/claude-bot/scripts/memory/search.sh --collections "issues,prs" "deployment failure"
+
+# Return more results
+/opt/claude-bot/scripts/memory/search.sh --top-k 10 "query"
+```
+
 ## Prerequisites
 
-- **Python packages:** `sqlite-vec`, `boto3`
+- **Python packages:** `sqlite-vec`, `boto3`, `mcp`, `pyyaml`
 - **AWS IAM:** The EC2 instance role needs `bedrock:InvokeModel` permission for `amazon.titan-embed-text-v2:0` in `us-west-2`
 - **Database directory:** Created automatically at `/opt/claude-bot/data/` (override with `CLAUDE_BOT_DATA_DIR` env var)
 

@@ -1,0 +1,19 @@
+# Persona-scoped collection access control.
+# Each persona lists the collections it may search.
+# The MCP server reads CLAUDE_PERSONA from the environment and restricts
+# search_memory() calls to the collections listed here.
+
+personas:
+  engineer:
+    - code
+    - issues
+    - docs
+    - prs
+  product-manager:
+    - issues
+    - docs
+    - brainstorms
+    - slack
+  default:
+    - issues
+    - docs

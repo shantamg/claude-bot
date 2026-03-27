@@ -49,7 +49,10 @@ if [ -d "$REPO_ROOT/core/memory" ]; then
   echo "Syncing memory/ scripts..."
   ssh "$HOST" "mkdir -p $BOT_HOME/scripts/memory"
   scp -q "$REPO_ROOT"/core/memory/*.py "$HOST:$BOT_HOME/scripts/memory/"
+  scp -q "$REPO_ROOT"/core/memory/*.sh "$HOST:$BOT_HOME/scripts/memory/" 2>/dev/null || true
+  scp -q "$REPO_ROOT"/core/memory/*.yaml "$HOST:$BOT_HOME/scripts/memory/" 2>/dev/null || true
   scp -q "$REPO_ROOT"/core/memory/README.md "$HOST:$BOT_HOME/scripts/memory/" 2>/dev/null || true
+  ssh "$HOST" "chmod +x $BOT_HOME/scripts/memory/*.sh 2>/dev/null || true"
 fi
 
 # ── Sync adapters ────────────────────────────────────────────────────────────
