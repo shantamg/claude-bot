@@ -70,9 +70,20 @@ fi
 # ── 3c. Sync code embeddings (incremental) ──────────────────────────────────
 # After pulling the project repo, run the code sync script to update vector
 # memory with any changed files. Runs in the background to avoid blocking.
+# CRITICAL: guard with a lockfile — without this, every git-pull (every minute)
+# spawns a new ~120MB Python process. Multiple concurrent syncs OOM the instance.
 SYNC_SCRIPT="$SCRIPTS_DIR/memory/sync-code.py"
+SYNC_LOCK="/tmp/${BOT_NAME:-claude-bot}-code-sync.lock"
 if [ -f "$SYNC_SCRIPT" ] && [ -n "$PROJECT_CHECKOUT" ] && [ -d "$PROJECT_CHECKOUT/.git" ]; then
-  python3 "$SYNC_SCRIPT" --repo "$PROJECT_CHECKOUT" >> "$BOT_LOG_DIR/code-sync.log" 2>&1 &
+  if [ -f "$SYNC_LOCK" ] && kill -0 "$(cat "$SYNC_LOCK" 2>/dev/null)" 2>/dev/null; then
+    : # Sync already running — skip
+  else
+    (
+      echo "$$" > "$SYNC_LOCK"
+      python3 "$SYNC_SCRIPT" --repo "$PROJECT_CHECKOUT" >> "$BOT_LOG_DIR/code-sync.log" 2>&1
+      rm -f "$SYNC_LOCK"
+    ) &
+  fi
 fi
 
 # ── 4. Sync Socket Mode listener ────────────────────────────────────────────
