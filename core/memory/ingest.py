@@ -283,22 +283,52 @@ def ingest_file(
             log.info(f"  ... ({len(final_chunks)} total)")
         return len(final_chunks)
 
-    # Embed and store
+    # Embed and store using the shared embeddings schema
     db = init_db()
     texts = [c["embed_text"] for c in final_chunks]
     log.info(f"Embedding {len(texts)} chunks via Bedrock Titan...")
     embeddings = get_embeddings(texts)
 
+    inserted = 0
     for chunk, embedding in zip(final_chunks, embeddings):
-        db.execute(
-            f"""INSERT OR REPLACE INTO {collection}_chunks
-                (id, content, metadata, embedding)
-                VALUES (?, ?, ?, ?)""",
-            (chunk["id"], chunk["text"], chunk["metadata"], embedding),
-        )
+        meta = json.loads(chunk["metadata"])
+        content_hash_val = content_hash(chunk["text"])
+
+        # Check if this exact content already exists in this collection
+        existing = db.execute(
+            "SELECT id FROM embeddings WHERE collection = ? AND content_hash = ?",
+            (collection, content_hash_val),
+        ).fetchone()
+
+        if existing:
+            row_id = existing[0]
+            # Update existing
+            db.execute(
+                """UPDATE embeddings SET content_snippet = ?, source_ref = ?,
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                   WHERE id = ?""",
+                (chunk["text"][:500], chunk["id"], row_id),
+            )
+            db.execute(
+                "UPDATE vec_embeddings SET embedding = ? WHERE rowid = ?",
+                (embedding, row_id),
+            )
+        else:
+            # Insert new
+            cursor = db.execute(
+                """INSERT INTO embeddings (collection, source_type, source_ref, content_hash, content_snippet)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (collection, meta.get("source", "md"), chunk["id"], content_hash_val, chunk["text"][:500]),
+            )
+            row_id = cursor.lastrowid
+            db.execute(
+                "INSERT INTO vec_embeddings (rowid, embedding) VALUES (?, ?)",
+                (row_id, embedding),
+            )
+            inserted += 1
 
     db.commit()
-    log.info(f"Ingested {len(final_chunks)} chunks from {filename} into '{collection}' collection")
+    log.info(f"Ingested {inserted} new + {len(final_chunks) - inserted} updated chunks from {filename} into '{collection}'")
     return len(final_chunks)
 
 
