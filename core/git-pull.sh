@@ -133,6 +133,39 @@ if [ -f "$MEMORY_DB" ] && [ ! -f "$BACKUP_MARKER" ]; then
   fi
 fi
 
+# ── 3f. Ingest converted PDFs from S3 ─────────────────────────────────────────
+# The pdf-to-markdown Lambda converts PDFs in s3://bucket/inbox/ and outputs
+# markdown to s3://bucket/converted/. Check for new conversions and ingest.
+INGEST_SCRIPT="$SCRIPTS_DIR/memory/ingest.py"
+S3_BUCKET="${MEMORY_BACKUP_BUCKET:-}"
+CONVERTED_MARKER_DIR="${STATE_DIR}/ingested"
+if [ -f "$INGEST_SCRIPT" ] && [ -n "$S3_BUCKET" ]; then
+  mkdir -p "$CONVERTED_MARKER_DIR"
+  # List converted files
+  CONVERTED_FILES=$(/home/ubuntu/.local/bin/aws s3 ls "s3://${S3_BUCKET}/converted/" --region us-west-2 2>/dev/null \
+    | awk '{print $NF}' | grep '\.md$') || true
+  for MD_FILE in $CONVERTED_FILES; do
+    MARKER_FILE="$CONVERTED_MARKER_DIR/$MD_FILE.ingested"
+    if [ ! -f "$MARKER_FILE" ]; then
+      LOAD=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo "99")
+      if awk "BEGIN {exit !($LOAD < 1.5)}" 2>/dev/null; then
+        (
+          LOCAL_FILE="/tmp/ingest-${MD_FILE}"
+          /home/ubuntu/.local/bin/aws s3 cp "s3://${S3_BUCKET}/converted/${MD_FILE}" "$LOCAL_FILE" \
+            --region us-west-2 >> "$BOT_LOG_DIR/ingest.log" 2>&1
+          if [ -f "$LOCAL_FILE" ]; then
+            TITLE=$(echo "$MD_FILE" | sed 's/\.md$//' | tr '_-' '  ')
+            nice -n 15 python3 "$INGEST_SCRIPT" --file "$LOCAL_FILE" --collection science \
+              --title "$TITLE" >> "$BOT_LOG_DIR/ingest.log" 2>&1 \
+              && touch "$MARKER_FILE"
+            rm -f "$LOCAL_FILE"
+          fi
+        ) &
+      fi
+    fi
+  done
+fi
+
 # ── 4. Sync Socket Mode listener ────────────────────────────────────────────
 SOCKET_SRC="$BOT_HOME/adapters/slack"
 SOCKET_DST="$BOT_HOME/adapters/slack"
