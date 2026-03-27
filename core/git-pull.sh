@@ -32,6 +32,14 @@ if [ -d "$FRAMEWORK_DIR/core" ]; then
     cp "$FRAMEWORK_DIR"/core/lib/*.sh "$SCRIPTS_DIR/lib/" 2>/dev/null || true
     chmod +x "$SCRIPTS_DIR"/lib/*.sh 2>/dev/null || true
   fi
+  # Copy memory/ subdirectory (vector DB scripts: ingest, search, sync, embed)
+  if [ -d "$FRAMEWORK_DIR/core/memory" ]; then
+    mkdir -p "$SCRIPTS_DIR/memory"
+    cp "$FRAMEWORK_DIR"/core/memory/*.py "$SCRIPTS_DIR/memory/" 2>/dev/null || true
+    cp "$FRAMEWORK_DIR"/core/memory/*.sh "$SCRIPTS_DIR/memory/" 2>/dev/null || true
+    cp "$FRAMEWORK_DIR"/core/memory/*.yaml "$SCRIPTS_DIR/memory/" 2>/dev/null || true
+    chmod +x "$SCRIPTS_DIR"/memory/*.sh "$SCRIPTS_DIR"/memory/*.py 2>/dev/null || true
+  fi
 fi
 
 if [ -d "$FRAMEWORK_DIR/adapters" ]; then
