@@ -86,6 +86,45 @@ if [ -f "$SYNC_SCRIPT" ] && [ -n "$PROJECT_CHECKOUT" ] && [ -d "$PROJECT_CHECKOU
   fi
 fi
 
+# ── 3d. Sync issues/PRs embeddings (incremental) ─────────────────────────────
+# Re-embed issues that changed since last run. Each issue is a single Bedrock
+# call (~0.5s), so even 5-10 changed issues is trivial. Same lockfile pattern.
+ISSUES_SYNC_SCRIPT="$SCRIPTS_DIR/memory/sync-issues.py"
+ISSUES_SYNC_LOCK="/tmp/${BOT_NAME:-claude-bot}-issues-sync.lock"
+ISSUES_REPO="${PROJECT_REPO:-}"
+if [ -f "$ISSUES_SYNC_SCRIPT" ] && [ -n "$ISSUES_REPO" ]; then
+  if [ -f "$ISSUES_SYNC_LOCK" ] && kill -0 "$(cat "$ISSUES_SYNC_LOCK" 2>/dev/null)" 2>/dev/null; then
+    : # Sync already running — skip
+  else
+    (
+      echo "$$" > "$ISSUES_SYNC_LOCK"
+      python3 "$ISSUES_SYNC_SCRIPT" --repo "$ISSUES_REPO" >> "$BOT_LOG_DIR/issues-sync.log" 2>&1
+      rm -f "$ISSUES_SYNC_LOCK"
+    ) &
+  fi
+fi
+
+# ── 3e. Backup vector database to S3 (daily) ─────────────────────────────────
+# The sqlite-vec database is a local file — back it up daily to S3.
+MEMORY_DB="${DATA_DIR:-/opt/claude-bot/data}/memory.db"
+BACKUP_MARKER="/tmp/${BOT_NAME:-claude-bot}-memory-backup-$(date +%Y%m%d).done"
+if [ -f "$MEMORY_DB" ] && [ ! -f "$BACKUP_MARKER" ]; then
+  S3_BUCKET="${MEMORY_BACKUP_BUCKET:-}"
+  if [ -n "$S3_BUCKET" ]; then
+    (
+      BACKUP_FILE="/tmp/memory-backup-$(date +%Y%m%d-%H%M%S).db"
+      # Use sqlite3 .backup for a consistent snapshot (not just cp)
+      sqlite3 "$MEMORY_DB" ".backup '$BACKUP_FILE'" 2>/dev/null
+      if [ -f "$BACKUP_FILE" ]; then
+        aws s3 cp "$BACKUP_FILE" "s3://${S3_BUCKET}/memory-backups/memory-$(date +%Y%m%d).db" \
+          --region "${AWS_DEFAULT_REGION:-us-west-2}" >> "$BOT_LOG_DIR/memory-backup.log" 2>&1 \
+          && touch "$BACKUP_MARKER"
+        rm -f "$BACKUP_FILE"
+      fi
+    ) &
+  fi
+fi
+
 # ── 4. Sync Socket Mode listener ────────────────────────────────────────────
 SOCKET_SRC="$BOT_HOME/adapters/slack"
 SOCKET_DST="$BOT_HOME/adapters/slack"
