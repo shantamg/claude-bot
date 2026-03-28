@@ -44,6 +44,7 @@ SOCKET_WATCHDOG_INTERVAL=$(_yaml '.infrastructure.socket_watchdog_interval // "*
 STALE_LOCK_INTERVAL=$(_yaml '.infrastructure.stale_lock_interval // "*/5 * * * *"' "*/5 * * * *")
 QUEUE_DRAIN_INTERVAL=$(_yaml '.infrastructure.queue_drain_interval // "* * * * *"' "* * * * *")
 HEALTH_CHECK_TIME=$(_yaml '.infrastructure.health_check_time // "0 6 * * *"' "0 6 * * *")
+CACHE_CLEANUP_TIME=$(_yaml '.infrastructure.cache_cleanup_time // "0 4 * * 0"' "0 4 * * 0")
 LABEL_DISPATCHER_INTERVAL=$(_yaml '.infrastructure.label_dispatcher_interval // "* * * * *"' "* * * * *")
 
 # GitHub settings
@@ -66,6 +67,7 @@ ${GIT_PULL_INTERVAL} ${SCRIPTS_DIR}/git-pull.sh >> ${LOG_DIR}/cron.log 2>&1
 ${STALE_LOCK_INTERVAL} ${SCRIPTS_DIR}/clear-stale-locks.sh
 ${QUEUE_DRAIN_INTERVAL} ${SCRIPTS_DIR}/process-queue.sh >> ${LOG_DIR}/cron.log 2>&1
 ${HEALTH_CHECK_TIME} ${SCRIPTS_DIR}/bot-health-check.sh >> ${LOG_DIR}/cron.log 2>&1
+${CACHE_CLEANUP_TIME} ${SCRIPTS_DIR}/cleanup-caches.sh >> ${LOG_DIR}/cleanup-caches.log 2>&1
 EOF
 
 # Socket watchdog (only if Slack socket mode is enabled)

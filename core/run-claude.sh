@@ -101,6 +101,20 @@ if ! "$SCRIPT_DIR/check-resources.sh" > /dev/null 2>&1; then
       -d "$(jq -n --arg ch "$CHANNEL" --arg ts "$MSG_TS" '{channel: $ch, timestamp: $ts, name: "hourglass_flowing_sand"}')" > /dev/null 2>&1 || true
   fi
 
+  # ── Notify Slack + auto-remediate on disk failures ──────────────────────
+  if [ -n "$MSG_TS" ] && [ -n "${CHANNEL:-}" ] && echo "$RESOURCE_MSG" | grep -q "disk"; then
+    # Tell the user why the bot is paused
+    DISK_PCT=$(echo "$RESOURCE_MSG" | grep -oP '\d+%' || echo "high")
+    "$SCRIPT_DIR/slack-post.sh" --channel "$CHANNEL" --thread-ts "$MSG_TS" \
+      --text "Paused — disk is ${DISK_PCT} full. Running automatic cleanup, will retry shortly." \
+      2>/dev/null || true
+
+    # Auto-remediate: run cache cleanup
+    echo "[$(date)] Auto-remediating disk pressure..." >> "$LOGFILE"
+    FREED=$("$SCRIPT_DIR/cleanup-caches.sh" 2>/dev/null || echo "0")
+    echo "[$(date)] Cleanup freed ~${FREED}MB" >> "$LOGFILE"
+  fi
+
   rm -f "$LOCKFILE"
   exit 0
 fi
