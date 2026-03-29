@@ -57,6 +57,7 @@ fi
 
 # Parse the queued request
 COMMAND_SLUG=$(jq -r '.command_slug // empty' "$OLDEST")
+WORKSPACE=$(jq -r '.workspace // empty' "$OLDEST")
 PROMPT=$(jq -r '.prompt // empty' "$OLDEST")
 PROMPT_FILE=$(jq -r '.prompt_file // empty' "$OLDEST")
 MSG_TS=$(jq -r '.msg_ts // empty' "$OLDEST")
@@ -217,8 +218,14 @@ export PROVENANCE_CHANNEL="${PROVENANCE_CHANNEL}"
 export PROVENANCE_REQUESTER="${PROVENANCE_REQUESTER}"
 export PROVENANCE_MESSAGE="${PROVENANCE_MESSAGE}"
 
-nohup "$SCRIPTS_DIR/run-claude.sh" "$COMMAND_SLUG" "$PROMPT" "$PROMPT_FILE" "$MSG_TS" \
-  >> "$LOGFILE" 2>&1 &
+# Dispatch via workspace mode if workspace field is set, otherwise command-slug mode
+if [ -n "$WORKSPACE" ]; then
+  nohup "$SCRIPTS_DIR/run-claude.sh" --workspace "$WORKSPACE" "$PROMPT" "$PROMPT_FILE" "$MSG_TS" \
+    >> "$LOGFILE" 2>&1 &
+else
+  nohup "$SCRIPTS_DIR/run-claude.sh" "$COMMAND_SLUG" "$PROMPT" "$PROMPT_FILE" "$MSG_TS" \
+    >> "$LOGFILE" 2>&1 &
+fi
 
 echo "[$(date)] Dispatched queued $COMMAND_SLUG (PID $!)" >> "$LOGFILE"
 
