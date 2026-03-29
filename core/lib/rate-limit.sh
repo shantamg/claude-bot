@@ -33,7 +33,8 @@ rate_limit_gate() {
       rm -f "$RATE_LIMIT_FLAG" "$RATE_LIMIT_INVESTIGATE_PENDING" "${LOCK_PREFIX}-rate-limit-snapshot.txt" 2>/dev/null || true
     elif [ "$COMMAND_SLUG" = "rate-limit-investigate" ]; then
       echo "[$(date)] Rate limit reset — running investigation" >> "$LOGFILE"
-      rm -f "$RATE_LIMIT_FLAG" "$RATE_LIMIT_INVESTIGATE_PENDING" "${LOCK_PREFIX}-rate-limit-snapshot.txt" 2>/dev/null || true
+      # Clear gate flags but keep snapshot — the investigation stage reads and cleans it up
+      rm -f "$RATE_LIMIT_FLAG" "$RATE_LIMIT_INVESTIGATE_PENDING" 2>/dev/null || true
     else
       echo "[$(date)] RATE LIMIT GATE — skipping $COMMAND_SLUG (investigation pending)" >> "$LOGFILE"
       rm -f "$LOCKFILE"
@@ -127,15 +128,16 @@ rate_limit_detect() {
         '{channel: $ch, text: $text}')" > /dev/null 2>&1 || true
   fi
 
-  # Queue investigation task
+  # Queue investigation task (dispatched via workspace when process-queue picks it up)
   touch "$RATE_LIMIT_INVESTIGATE_PENDING"
   mkdir -p "$QUEUE_DIR"
   jq -n \
     --arg command_slug "rate-limit-investigate" \
-    --arg prompt "You are investigating a rate-limit event on the Anthropic Claude API. Read the snapshot at ${LOCK_PREFIX}-rate-limit-snapshot.txt, check ${BOT_LOG_DIR}/ for recent logs (focus on agent start times and frequency), and post a summary to #bot-ops using slack-post.sh. Format: *Rate Limit Investigation* with When, Concurrent agents, Likely cause, and Recommendations sections. Channel: ${bot_ops}." \
+    --arg workspace "rate-limit-investigate" \
+    --arg prompt "Investigate a rate-limit event on the Anthropic Claude API. Snapshot: ${LOCK_PREFIX}-rate-limit-snapshot.txt. Logs: ${BOT_LOG_DIR}/. Post summary to #bot-ops (channel: ${bot_ops})." \
     --arg priority "high" \
     --arg queued_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{command_slug: $command_slug, prompt: $prompt, prompt_file: "",
+    '{command_slug: $command_slug, workspace: $workspace, prompt: $prompt, prompt_file: "",
       msg_ts: "", channel: "", provenance_channel: "", provenance_requester: "",
       provenance_message: "", slack_channel: "", slack_ts: "",
       priority: $priority, queued_at: $queued_at}' \
