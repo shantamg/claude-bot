@@ -66,12 +66,17 @@ fi
 # so staging doesn't drift too far behind.
 if [ -n "$PROJECT_CHECKOUT" ] && [ -d "$PROJECT_CHECKOUT/.git" ]; then
   cd "$PROJECT_CHECKOUT"
-  git fetch origin "bot/staging" >> "$LOGFILE" 2>&1 || true
-  if ! git rev-parse --verify "origin/bot/staging" >/dev/null 2>&1; then
+  # Check the remote directly — stale local refs survive branch deletion
+  if ! git ls-remote --exit-code origin "bot/staging" >/dev/null 2>&1; then
+    # Clean up stale local tracking ref if it exists
+    git update-ref -d "refs/remotes/origin/bot/staging" 2>/dev/null || true
     # Branch doesn't exist yet — create it from the default branch
     git branch "bot/staging" "origin/${DEFAULT_BRANCH:-main}" >> "$LOGFILE" 2>&1
     git push origin "bot/staging" >> "$LOGFILE" 2>&1
     echo "[$(date)] Created bot/staging from ${DEFAULT_BRANCH:-main}" >> "$LOGFILE"
+  else
+    # Branch exists — keep local ref in sync
+    git fetch origin "bot/staging" >> "$LOGFILE" 2>&1 || true
   fi
 fi
 
