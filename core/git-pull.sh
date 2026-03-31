@@ -49,15 +49,19 @@ if [ -d "$FRAMEWORK_DIR/adapters" ]; then
 fi
 
 # ── 3. Sync project repo ────────────────────────────────────────────────────
-# Pull the current branch (not necessarily DEFAULT_BRANCH) so feature branches
-# can be tested on the instance without being clobbered.
+# Always keep the main checkout on the default branch. Feature branches should
+# use git worktrees, not switch the main checkout — a stale non-main branch
+# breaks bot.yaml resolution and every cron job that depends on it.
 if [ -n "$PROJECT_CHECKOUT" ] && [ -d "$PROJECT_CHECKOUT/.git" ]; then
   cd "$PROJECT_CHECKOUT"
   CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
-  if [ -n "$CURRENT_BRANCH" ]; then
-    git fetch origin "$CURRENT_BRANCH" >> "$LOGFILE" 2>&1 && \
-    git reset --hard "origin/$CURRENT_BRANCH" >> "$LOGFILE" 2>&1 || true
+  TARGET_BRANCH="${DEFAULT_BRANCH:-main}"
+  if [ "$CURRENT_BRANCH" != "$TARGET_BRANCH" ]; then
+    echo "[$(date)] WARNING: project repo on '$CURRENT_BRANCH', expected '$TARGET_BRANCH' — switching back" >> "$LOGFILE"
+    git checkout "$TARGET_BRANCH" >> "$LOGFILE" 2>&1 || true
   fi
+  git fetch origin "$TARGET_BRANCH" >> "$LOGFILE" 2>&1 && \
+  git reset --hard "origin/$TARGET_BRANCH" >> "$LOGFILE" 2>&1 || true
 fi
 
 # ── 3b. Ensure bot/staging branch exists and stays in sync ────────────────
